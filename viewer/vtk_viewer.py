@@ -82,8 +82,11 @@ class VTKViewer(QWidget):
         
         # 기존 메시 제거 후 새 메시 추가
         self.plotter.clear()
-        self.plotter.add_mesh(pv_mesh, color='lightblue', opacity=0.8, show_edges=True)
-        self.plotter.add_axes()
+        # 어두운 배경 설정
+        self.plotter.background_color = '#1e1e1e'
+        self.plotter.add_mesh(pv_mesh, color='#4ec9b0', opacity=0.8, show_edges=True, edge_color='#0078d4')
+        self.plotter.add_axes(line_width=3, labels_off=False)
+        # 축 색상 설정
         self.plotter.show()
         
         # 정보 업데이트

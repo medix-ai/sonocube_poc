@@ -39,9 +39,17 @@ data/*.mp4
 data/*.avi
 data/*.dcm
 data/*.dicom
+
+# Model files (연구팀에서 제공, Git에 커밋하지 않음)
 model/*.pt
 model/*.onnx
 model/*.pth
+model/*.pkl
+model/config_*.json
+# 예시 파일은 제외하지 않음
+!model/*.example
+!model/README.md
+
 output/
 screenshots/
 temp_images/

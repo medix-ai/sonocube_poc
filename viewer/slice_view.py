@@ -38,11 +38,17 @@ class SliceViewer(QWidget):
     def init_ui(self):
         """UI 초기화"""
         layout = QVBoxLayout(self)
+        layout.setContentsMargins(4, 4, 4, 4)
         
-        # Matplotlib 캔버스
-        self.figure = Figure(figsize=(8, 8))
+        # Matplotlib 캔버스 (어두운 테마)
+        self.figure = Figure(figsize=(8, 8), facecolor='#1e1e1e')
         self.canvas = FigureCanvas(self.figure)
-        self.ax = self.figure.add_subplot(111)
+        self.ax = self.figure.add_subplot(111, facecolor='#1e1e1e')
+        self.ax.tick_params(colors='#e0e0e0')
+        self.ax.spines['bottom'].set_color('#4d4d4d')
+        self.ax.spines['top'].set_color('#4d4d4d')
+        self.ax.spines['right'].set_color('#4d4d4d')
+        self.ax.spines['left'].set_color('#4d4d4d')
         layout.addWidget(self.canvas)
         
         # 슬라이더
@@ -101,13 +107,14 @@ class SliceViewer(QWidget):
         
         # ED/ES 표시
         if self.current_idx == self.ed_idx:
-            self.ax.set_title(f"Frame {self.current_idx} (ED)", fontsize=14, color='blue')
+            self.ax.set_title(f"Frame {self.current_idx} (ED)", fontsize=14, color='#4ec9b0', pad=10)
         elif self.current_idx == self.es_idx:
-            self.ax.set_title(f"Frame {self.current_idx} (ES)", fontsize=14, color='red')
+            self.ax.set_title(f"Frame {self.current_idx} (ES)", fontsize=14, color='#f48771', pad=10)
         else:
-            self.ax.set_title(f"Frame {self.current_idx}", fontsize=14)
+            self.ax.set_title(f"Frame {self.current_idx}", fontsize=14, color='#e0e0e0', pad=10)
         
         self.ax.axis('off')
+        self.figure.patch.set_facecolor('#1e1e1e')
         self.canvas.draw()
         
         # 정보 업데이트
