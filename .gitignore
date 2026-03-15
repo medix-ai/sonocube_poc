@@ -3,15 +3,21 @@
 
 # Python (root)
 __pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
 *.pyc
 venv/
 .venv/
 env/
+ENV/
 
 # IDE
 .idea/
 .vscode/
 *.swp
+*.swo
 *~
 
 # Build / output
@@ -19,9 +25,38 @@ dist/
 build/
 *.app
 *.exe
+*.spec.bak
 
 # Project output (do not commit)
 sonocube_poc/output/
 sonocube_poc/screenshots/
 sonocube_poc/temp_images/
+output/
+screenshots/
+temp_images/
 **/__pycache__/
+*.log
+
+# Project specific (data files)
+sonocube_poc/data/*.mp4
+sonocube_poc/data/*.avi
+sonocube_poc/data/*.dcm
+sonocube_poc/data/*.dicom
+
+# Model files (연구팀에서 제공, Git에 커밋하지 않음)
+sonocube_poc/model/*.pt
+sonocube_poc/model/*.onnx
+sonocube_poc/model/*.pth
+sonocube_poc/model/*.pkl
+sonocube_poc/model/config_*.json
+!sonocube_poc/model/*.example
+!sonocube_poc/model/README.md
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb

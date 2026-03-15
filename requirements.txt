@@ -1,0 +1,42 @@
+# SonoCube PoC Requirements
+
+# GUI
+PyQt5>=5.15.0
+PyQt5-Qt5>=5.15.0
+PyQt5-sip>=12.8.0
+
+# 영상 처리
+opencv-python>=4.5.0
+numpy>=1.21.0
+Pillow>=8.0.0
+
+# DICOM 지원
+pydicom>=2.2.0
+
+# 3D 처리 및 시각화
+open3d>=0.13.0
+pyvista>=0.32.0
+pyvistaqt>=0.6.0
+vtk>=9.0.0
+scikit-image>=0.19.0
+scipy>=1.8.0
+
+# 2D 시각화
+matplotlib>=3.4.0
+
+# PDF 리포트
+reportlab>=3.6.0
+
+# AI 모델 inference
+onnxruntime>=1.12.0
+torch>=1.12.0
+torchvision>=0.13.0
+
+# 패키징
+pyinstaller>=5.0.0
+
+# 개발 도구 (옵션)
+pytest>=7.0.0
+black>=22.0.0
+flake8>=4.0.0
+
