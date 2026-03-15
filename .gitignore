@@ -1,0 +1,27 @@
+# macOS
+.DS_Store
+
+# Python (root)
+__pycache__/
+*.pyc
+venv/
+.venv/
+env/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*~
+
+# Build / output
+dist/
+build/
+*.app
+*.exe
+
+# Project output (do not commit)
+sonocube_poc/output/
+sonocube_poc/screenshots/
+sonocube_poc/temp_images/
+**/__pycache__/
