@@ -75,8 +75,8 @@ class SonoCubeEngine:
     def _load_model(self):
         """모델 로딩 (ONNX 우선, 없으면 PyTorch)"""
         # ONNX 모델 찾기
-        onnx_files = list(self.model_dir.glob("*.onnx"))
-        pt_files = list(self.model_dir.glob("*.pt"))
+        onnx_files = list(self.model_dir.rglob("*.onnx"))
+        pt_files = list(self.model_dir.rglob("*.pt"))
         
         if onnx_files:
             # ONNX 모델 로딩
@@ -208,28 +208,27 @@ class SonoCubeEngine:
         return processed
     
     def _infer_onnx(self, video: np.ndarray) -> Dict[str, Any]:
-        """ONNX 모델 inference"""
+        """ONNX 모델 inference — 입력: (batch, 3, 96, 96), 출력: (batch, 1) EF"""
+        import cv2
         session = self.model["session"]
-        
-        # 입력 형태 변환 (연구팀 모델에 맞게 조정 필요)
-        # 예: (T, H, W, C) -> (1, T, C, H, W) 또는 (1, T, H, W, C)
         input_name = session.get_inputs()[0].name
-        
-        # 비디오를 모델 입력 형태로 변환
-        if len(video.shape) == 4:  # (T, H, W, C)
-            # 배치 차원 추가 및 채널 순서 조정
-            input_data = np.expand_dims(video, axis=0)  # (1, T, H, W, C)
-            # 필요시 (1, T, C, H, W)로 변환
-            if video.shape[-1] == 1:  # Grayscale
-                input_data = input_data.transpose(0, 1, 4, 2, 3)  # (1, T, C, H, W)
-        else:
-            input_data = np.expand_dims(video, axis=0)
-        
-        # Inference
-        outputs = session.run(None, {input_name: input_data.astype(np.float32)})
-        
-        # 출력 파싱 (연구팀 모델 출력 형태에 맞게 조정 필요)
-        return self._parse_onnx_outputs(outputs)
+
+        ef_values = []
+        for frame in video:
+            # grayscale → RGB 3채널
+            if len(frame.shape) == 2:
+                frame = np.stack([frame] * 3, axis=-1)
+            elif frame.shape[-1] == 1:
+                frame = np.concatenate([frame] * 3, axis=-1)
+
+            # 96×96 리사이즈 후 (1, 3, 96, 96)
+            frame_96 = cv2.resize(frame, (96, 96)).astype(np.float32) / 255.0
+            frame_tensor = frame_96.transpose(2, 0, 1)[np.newaxis]  # (1, 3, 96, 96)
+
+            output = session.run(None, {input_name: frame_tensor})
+            ef_values.append(float(output[0][0, 0]))
+
+        return self._parse_onnx_outputs(ef_values, len(video))
     
     def _infer_pytorch(self, video: np.ndarray) -> Dict[str, Any]:
         """PyTorch 모델 inference"""
@@ -264,29 +263,18 @@ class SonoCubeEngine:
         
         return self._parse_pytorch_outputs(outputs)
     
-    def _parse_onnx_outputs(self, outputs: List[np.ndarray]) -> Dict[str, Any]:
-        """ONNX 모델 출력 파싱 (연구팀 모델에 맞게 수정 필요)"""
-        # 기본 파싱 (연구팀이 제공하는 출력 형태에 맞게 수정)
-        result = {}
-        
-        if len(outputs) >= 1:
-            # 첫 번째 출력: segmentation masks
-            masks = outputs[0]
-            if len(masks.shape) == 5:  # (1, T, C, H, W)
-                masks = masks[0]  # (T, C, H, W)
-                masks = masks.transpose(0, 2, 3, 1)  # (T, H, W, C)
-            result["lv_masks"] = masks
-        
-        if len(outputs) >= 2:
-            # 두 번째 출력: EF
-            result["ef"] = float(outputs[1][0])
-        
-        if len(outputs) >= 3:
-            # 세 번째 출력: ED/ES frame indices
-            result["ed_frame_idx"] = int(outputs[2][0])
-            result["es_frame_idx"] = int(outputs[3][0]) if len(outputs) > 3 else int(outputs[2][1])
-        
-        return result
+    def _parse_onnx_outputs(self, ef_values: List[float], num_frames: int) -> Dict[str, Any]:
+        """프레임별 EF 예측값을 집계 — 모델 출력: (batch, 1) EF only"""
+        ef = float(np.median(ef_values))
+        # ED: EF가 가장 낮은 프레임(수축기), ES: 가장 높은 프레임(이완기)
+        ed_frame_idx = int(np.argmin(ef_values))
+        es_frame_idx = int(np.argmax(ef_values))
+        return {
+            "ef": ef,
+            "ed_frame_idx": ed_frame_idx,
+            "es_frame_idx": es_frame_idx,
+            "lv_masks": [],
+        }
     
     def _parse_pytorch_outputs(self, outputs: Any) -> Dict[str, Any]:
         """PyTorch 모델 출력 파싱 (연구팀 모델에 맞게 수정 필요)"""

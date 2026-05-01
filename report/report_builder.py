@@ -14,8 +14,7 @@ from reportlab.lib.enums import TA_CENTER, TA_LEFT
 from reportlab.lib import colors
 
 import numpy as np
-import matplotlib.pyplot as plt
-from matplotlib.backends.backend_agg import FigureCanvasAgg
+import cv2
 
 
 def build_pdf(report_path: Path, analysis_result: Dict[str, Any]):
@@ -137,31 +136,30 @@ def build_pdf(report_path: Path, analysis_result: Dict[str, Any]):
 
 
 def _create_frame_image(frame: np.ndarray, mask: Optional[np.ndarray], label: str) -> Path:
-    """프레임 이미지를 임시 파일로 저장"""
+    """프레임 이미지를 임시 파일로 저장 (OpenCV 사용, 스레드 안전)"""
     from utils.spec import PROJECT_ROOT
     temp_dir = PROJECT_ROOT / "temp_images"
     temp_dir.mkdir(exist_ok=True)
-    
-    fig, ax = plt.subplots(figsize=(8, 8))
-    
-    # 프레임 표시
-    if len(frame.shape) == 3:
-        ax.imshow(frame, cmap='gray')
+
+    # grayscale → BGR 변환
+    if len(frame.shape) == 2:
+        img = cv2.cvtColor(frame, cv2.COLOR_GRAY2BGR)
+    elif frame.shape[2] == 1:
+        img = cv2.cvtColor(frame[:, :, 0], cv2.COLOR_GRAY2BGR)
     else:
-        ax.imshow(frame, cmap='gray')
-    
-    # 마스크 오버레이
+        img = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
+
+    # 마스크 윤곽선 오버레이
     if mask is not None:
-        ax.contour(mask, levels=[0.5], colors=['red'], linewidths=2)
-    
-    ax.set_title(f"{label} Frame", fontsize=16)
-    ax.axis('off')
-    
-    # 이미지 저장
+        mask_u8 = (mask > 0.5).astype(np.uint8) * 255
+        contours, _ = cv2.findContours(mask_u8, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        cv2.drawContours(img, contours, -1, (0, 0, 255), 2)
+
+    # 라벨 텍스트
+    cv2.putText(img, label, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (255, 255, 255), 2)
+
     img_path = temp_dir / f"{label}_frame.png"
-    fig.savefig(str(img_path), bbox_inches='tight', dpi=100)
-    plt.close(fig)
-    
+    cv2.imwrite(str(img_path), img)
     return img_path
 
 
