@@ -265,14 +265,16 @@ class SonoCubeEngine:
     
     def _parse_onnx_outputs(self, ef_values: List[float], num_frames: int) -> Dict[str, Any]:
         """프레임별 EF 예측값을 집계 — 모델 출력: (batch, 1) EF only"""
-        ef = float(np.median(ef_values))
-        # ED: EF가 가장 낮은 프레임(수축기), ES: 가장 높은 프레임(이완기)
-        ed_frame_idx = int(np.argmin(ef_values))
-        es_frame_idx = int(np.argmax(ef_values))
+        arr = np.array(ef_values)
         return {
-            "ef": ef,
-            "ed_frame_idx": ed_frame_idx,
-            "es_frame_idx": es_frame_idx,
+            "ef": float(np.median(arr)),
+            "ef_mean": float(np.mean(arr)),
+            "ef_std": float(np.std(arr)),
+            "ef_min": float(np.min(arr)),
+            "ef_max": float(np.max(arr)),
+            "framewise_ef": list(ef_values),
+            "ed_frame_idx": int(np.argmin(arr)),
+            "es_frame_idx": int(np.argmax(arr)),
             "lv_masks": [],
         }
     
@@ -374,21 +376,19 @@ class SonoCubeEngine:
             mask[ellipse] = 1
             masks.append(mask)
         
-        ed_idx = 0
-        es_idx = T // 2
-        edv = random.uniform(100, 200)
-        esv = random.uniform(40, 100)
-        ef = calculate_ef(edv, esv)
-        
+        ef_values = [random.uniform(45, 65) for _ in range(T)]
+        arr = np.array(ef_values)
         return {
             "lv_masks": masks,
-            "ef": ef,
-            "ed_frame_idx": ed_idx,
-            "es_frame_idx": es_idx,
-            "volume_info": {
-                "edv": edv,
-                "esv": esv
-            }
+            "ef": float(np.median(arr)),
+            "ef_mean": float(np.mean(arr)),
+            "ef_std": float(np.std(arr)),
+            "ef_min": float(np.min(arr)),
+            "ef_max": float(np.max(arr)),
+            "framewise_ef": ef_values,
+            "ed_frame_idx": int(np.argmin(arr)),
+            "es_frame_idx": int(np.argmax(arr)),
+            "volume_info": {"edv": None, "esv": None},
         }
 
 
@@ -431,22 +431,36 @@ def analyze_clip(video_path: Path, model_dir: Optional[Path] = None) -> Dict[str
         ed_idx = 0
         es_idx = len(processed_frames) // 2
     
+    from utils.constants import get_confidence_level, UNSUPPORTED_METRICS
+
+    ef_std = results.get("ef_std", 0.0)
+    model_info = {
+        "name": engine.config.get("model_name", "sonocube-ef"),
+        "version": engine.config.get("model_version", "v0.1"),
+        "variant": engine.model.get("path", Path("unknown")).parent.name if engine.model_loaded and engine.model else "unknown",
+        "path": str(engine.model.get("path", "")) if engine.model_loaded and engine.model else "",
+    }
+
     return {
         "frames": processed_frames,
         "ed_frame_idx": results.get("ed_frame_idx", 0),
         "es_frame_idx": results.get("es_frame_idx", len(processed_frames) // 2),
         "ef": results.get("ef", 0.0),
+        "ef_mean": results.get("ef_mean", 0.0),
+        "ef_std": ef_std,
+        "ef_min": results.get("ef_min", 0.0),
+        "ef_max": results.get("ef_max", 0.0),
+        "ef_confidence": ef_std,
+        "framewise_ef": results.get("framewise_ef", []),
+        "confidence_level": get_confidence_level(ef_std),
+        "model_info": model_info,
         "lv_masks": {
             "ed": ed_mask,
             "es": es_mask,
             "all": lv_masks if isinstance(lv_masks, list) else []
         },
-        "tumor_mask": None,  # 옵션
-        "volume_info": results.get("volume_info", {
-            "edv": 0.0,
-            "esv": 0.0,
-            "tumor_volume": None
-        }),
+        "unsupported_metrics": UNSUPPORTED_METRICS,
+        "volume_info": {"edv": None, "esv": None},
         "fps": fps,
         "metadata": {
             "num_frames": len(processed_frames),

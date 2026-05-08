@@ -1,27 +1,30 @@
-"""
-SonoCube PoC 메인 진입점
-"""
+"""SonoCube PoC — 메인 진입점"""
 import sys
-from PyQt5.QtWidgets import QApplication
 from PyQt5.QtCore import Qt
-from gui.main_window import MainWindow
+from PyQt5.QtWidgets import QApplication
+
+from utils.constants import APP_NAME, APP_VERSION
+from utils.logger import get_logger
 
 
 def main():
-    """애플리케이션 실행"""
-    # 고해상도 디스플레이 지원
+    log = get_logger("sonocube")
+    log.info(f"Application started — {APP_NAME} v{APP_VERSION}")
+
     QApplication.setAttribute(Qt.AA_EnableHighDpiScaling, True)
     QApplication.setAttribute(Qt.AA_UseHighDpiPixmaps, True)
-    
+
     app = QApplication(sys.argv)
-    app.setApplicationName("SonoCube PoC")
+    app.setApplicationName(APP_NAME)
     app.setOrganizationName("SonoCube")
-    
-    # 메인 윈도우 생성 및 표시
+
+    from gui.main_window import MainWindow
     window = MainWindow()
     window.show()
-    
-    sys.exit(app.exec_())
+
+    code = app.exec_()
+    log.info("Application exited")
+    sys.exit(code)
 
 
 if __name__ == "__main__":
