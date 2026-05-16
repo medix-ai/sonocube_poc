@@ -1,39 +1,54 @@
-"""SonoCube v1.2 — 전문가형 dark navy QSS 테마 (인라인, 파일 I/O 없음)"""
+"""
+SonoCube — Clinical Workstation QSS Theme
+GE Vivid / Philips EPIQ 계열 의료 영상 소프트웨어 스타일
+: warm dark gray, functional color only, minimal decoration
+"""
 
+# ── 팔레트 (Clinical Dark Gray) ───────────────────────────────────────────────
+BG_BASE    = "#1a1a1a"   # 배경 (warm dark gray, not cool navy)
+BG_PANEL   = "#252525"   # 패널 / 사이드바
+BG_CARD    = "#2e2e2e"   # 카드 / 컨테이너
+BG_INPUT   = "#363636"   # 입력 필드
+BG_HOVER   = "#3a3a3a"   # hover 상태
 
-# ── 팔레트 ────────────────────────────────────────────────────────────────────
-# Background
-BG_BASE    = "#0d1117"   # 최외곽 배경
-BG_PANEL   = "#161b22"   # 패널 / 도크
-BG_CARD    = "#1c2128"   # 카드 / 그룹박스
-BG_INPUT   = "#21262d"   # 입력 필드
+BORDER     = "#404040"   # 표준 테두리
+BORDER_LT  = "#505050"   # 밝은 테두리
 
-# Border
-BORDER     = "#30363d"
-BORDER_LT  = "#3d444d"
-
-# Accent
-ACCENT     = "#1f6feb"   # primary blue
-ACCENT_HOV = "#388bfd"
-CYAN       = "#58a6ff"
+# Accent — clinical cyan (GE Vivid 스타일)
+ACCENT     = "#00b4cc"
+ACCENT_HOV = "#00cce6"
+ACCENT_DIM = "#007a8c"
 
 # Text
-TEXT_PRI   = "#e6edf3"
-TEXT_SEC   = "#8b949e"
-TEXT_DIS   = "#484f58"
+TEXT_PRI   = "#f0f0f0"   # 주요 텍스트 (따뜻한 흰색)
+TEXT_SEC   = "#909090"   # 레이블 / 보조
+TEXT_DIS   = "#505050"   # 비활성
 
-# Status
-HIGH_CLR   = "#3fb950"   # High confidence / success
-MED_CLR    = "#d29922"   # Medium / warning
-LOW_CLR    = "#f85149"   # Low confidence / error
+# EF 참고 색상 (임상 기준선 표시용, 진단 목적 아님)
+EF_NORMAL  = "#52c27a"   # ≥55% — 참고 범위 내
+EF_MID     = "#e8a217"   # 40-54% — 참고 범위 이하
+EF_LOW     = "#e05252"   # <40% — 참고 범위 크게 이하
+
+# Stability
+HIGH_CLR   = "#52c27a"
+MED_CLR    = "#e8a217"
+LOW_CLR    = "#e05252"
 
 
 def load_style_sheet(theme_name: str = "dark_theme") -> str:
-    """테마 이름과 무관하게 항상 내장 테마 반환 (파일 의존 제거)"""
-    return _DARK_NAVY_QSS
+    return _CLINICAL_QSS
 
 
-_DARK_NAVY_QSS = f"""
+def ef_color(ef: float) -> str:
+    """EF 수치에 대한 참고 색상 (연구 참고값, 진단 기준 아님)"""
+    if ef >= 55:
+        return EF_NORMAL
+    elif ef >= 40:
+        return EF_MID
+    return EF_LOW
+
+
+_CLINICAL_QSS = f"""
 /* ── 전체 기반 ──────────────────────────────────────────────────── */
 QMainWindow, QDialog, QWidget {{
     background-color: {BG_BASE};
@@ -44,56 +59,54 @@ QMainWindow, QDialog, QWidget {{
 
 /* ── 탭 위젯 ────────────────────────────────────────────────────── */
 QTabWidget::pane {{
-    border: 1px solid {BORDER};
-    background-color: {BG_PANEL};
-    border-radius: 6px;
+    border: none;
+    border-top: 1px solid {BORDER};
+    background-color: {BG_BASE};
 }}
 QTabBar::tab {{
-    background-color: {BG_CARD};
+    background-color: transparent;
     color: {TEXT_SEC};
-    padding: 8px 20px;
-    border: 1px solid {BORDER};
-    border-bottom: none;
-    border-top-left-radius: 6px;
-    border-top-right-radius: 6px;
+    padding: 9px 22px;
+    border: none;
+    border-bottom: 2px solid transparent;
     margin-right: 2px;
     font-size: 12px;
     font-weight: 500;
     min-width: 80px;
 }}
 QTabBar::tab:selected {{
-    background-color: {BG_PANEL};
     color: {TEXT_PRI};
-    border-color: {ACCENT};
     border-bottom: 2px solid {ACCENT};
     font-weight: 600;
 }}
 QTabBar::tab:hover:!selected {{
-    background-color: {BG_PANEL};
     color: {TEXT_PRI};
+    background-color: {BG_PANEL};
 }}
 
-/* ── 그룹박스 (카드) ────────────────────────────────────────────── */
+/* ── 그룹박스 ───────────────────────────────────────────────────── */
 QGroupBox {{
-    background-color: {BG_CARD};
+    background-color: transparent;
     border: 1px solid {BORDER};
-    border-radius: 6px;
-    margin-top: 18px;
+    border-radius: 4px;
+    margin-top: 16px;
     padding: 10px 8px 8px 8px;
-    font-size: 12px;
-    font-weight: 600;
     color: {TEXT_SEC};
+    font-size: 11px;
+    font-weight: 600;
 }}
 QGroupBox::title {{
     subcontrol-origin: margin;
     subcontrol-position: top left;
-    left: 10px;
+    left: 8px;
     top: 2px;
     color: {TEXT_SEC};
-    font-size: 11px;
+    font-size: 10px;
     font-weight: 600;
     text-transform: uppercase;
-    letter-spacing: 0.5px;
+    letter-spacing: 0.8px;
+    padding: 0 4px;
+    background-color: {BG_BASE};
 }}
 
 /* ── 버튼 ───────────────────────────────────────────────────────── */
@@ -101,19 +114,18 @@ QPushButton {{
     background-color: {BG_CARD};
     color: {TEXT_PRI};
     border: 1px solid {BORDER_LT};
-    border-radius: 6px;
-    padding: 7px 14px;
+    border-radius: 4px;
+    padding: 6px 14px;
     font-size: 12px;
     font-weight: 500;
-    min-height: 28px;
+    min-height: 26px;
 }}
 QPushButton:hover {{
-    background-color: {BG_INPUT};
-    border-color: {CYAN};
-    color: {TEXT_PRI};
+    background-color: {BG_HOVER};
+    border-color: {ACCENT};
 }}
 QPushButton:pressed {{
-    background-color: {ACCENT};
+    background-color: {ACCENT_DIM};
     border-color: {ACCENT};
     color: white;
 }}
@@ -124,18 +136,19 @@ QPushButton:disabled {{
 }}
 QPushButton[class="primary"] {{
     background-color: {ACCENT};
-    color: white;
+    color: #0a0a0a;
     border-color: {ACCENT};
-    font-weight: 600;
+    font-weight: 700;
 }}
 QPushButton[class="primary"]:hover {{
     background-color: {ACCENT_HOV};
     border-color: {ACCENT_HOV};
 }}
 QPushButton[class="primary"]:disabled {{
-    background-color: #1a3a5c;
-    color: #4a6a8a;
-    border-color: #1a3a5c;
+    background-color: {ACCENT_DIM};
+    color: #1a3a42;
+    border-color: {ACCENT_DIM};
+    opacity: 0.5;
 }}
 QPushButton[class="danger"] {{
     background-color: transparent;
@@ -148,28 +161,29 @@ QPushButton[class="danger"]:hover {{
 }}
 
 /* ── 입력 필드 ──────────────────────────────────────────────────── */
-QLineEdit, QTextEdit, QPlainTextEdit, QSpinBox, QDoubleSpinBox {{
+QLineEdit, QTextEdit, QPlainTextEdit {{
     background-color: {BG_INPUT};
     color: {TEXT_PRI};
     border: 1px solid {BORDER};
-    border-radius: 5px;
+    border-radius: 4px;
     padding: 5px 8px;
-    selection-background-color: {ACCENT};
+    selection-background-color: {ACCENT_DIM};
 }}
 QLineEdit:focus, QTextEdit:focus {{
     border-color: {ACCENT};
+    outline: none;
 }}
 QComboBox {{
     background-color: {BG_INPUT};
     color: {TEXT_PRI};
     border: 1px solid {BORDER};
-    border-radius: 5px;
+    border-radius: 4px;
     padding: 5px 8px;
-    min-height: 24px;
+    min-height: 22px;
 }}
 QComboBox::drop-down {{
     border: none;
-    width: 20px;
+    width: 18px;
 }}
 QComboBox:focus {{
     border-color: {ACCENT};
@@ -178,51 +192,52 @@ QComboBox QAbstractItemView {{
     background-color: {BG_CARD};
     color: {TEXT_PRI};
     border: 1px solid {BORDER};
-    selection-background-color: {ACCENT};
+    selection-background-color: {ACCENT_DIM};
 }}
 
 /* ── 슬라이더 ───────────────────────────────────────────────────── */
 QSlider::groove:horizontal {{
-    height: 4px;
+    height: 3px;
     background-color: {BORDER};
     border-radius: 2px;
 }}
 QSlider::handle:horizontal {{
-    background-color: {CYAN};
-    width: 14px;
-    height: 14px;
+    background-color: {ACCENT};
+    width: 12px;
+    height: 12px;
     margin: -5px 0;
-    border-radius: 7px;
+    border-radius: 6px;
 }}
 QSlider::sub-page:horizontal {{
-    background-color: {ACCENT};
+    background-color: {ACCENT_DIM};
     border-radius: 2px;
 }}
 
 /* ── 테이블 ─────────────────────────────────────────────────────── */
 QTableWidget, QTableView {{
-    background-color: {BG_CARD};
+    background-color: {BG_BASE};
     color: {TEXT_PRI};
     border: 1px solid {BORDER};
-    border-radius: 6px;
+    border-radius: 4px;
     gridline-color: {BORDER};
-    selection-background-color: {ACCENT};
-    selection-color: white;
+    selection-background-color: {ACCENT_DIM};
+    selection-color: {TEXT_PRI};
     font-size: 12px;
+    alternate-background-color: {BG_PANEL};
 }}
 QTableWidget::item {{
     padding: 6px 10px;
-    border-bottom: 1px solid {BORDER};
+    border: none;
 }}
 QTableWidget::item:selected {{
-    background-color: {ACCENT};
-    color: white;
+    background-color: {ACCENT_DIM};
 }}
 QHeaderView::section {{
-    background-color: {BG_BASE};
+    background-color: {BG_PANEL};
     color: {TEXT_SEC};
     border: none;
     border-bottom: 1px solid {BORDER};
+    border-right: 1px solid {BORDER};
     padding: 6px 10px;
     font-size: 11px;
     font-weight: 600;
@@ -232,81 +247,85 @@ QHeaderView::section {{
 
 /* ── 리스트 ─────────────────────────────────────────────────────── */
 QListWidget {{
-    background-color: {BG_CARD};
+    background-color: {BG_BASE};
     color: {TEXT_PRI};
     border: 1px solid {BORDER};
-    border-radius: 6px;
+    border-radius: 4px;
     font-size: 12px;
+    outline: none;
 }}
 QListWidget::item {{
-    padding: 6px 10px;
+    padding: 7px 10px;
     border-bottom: 1px solid {BORDER};
 }}
+QListWidget::item:last {{
+    border-bottom: none;
+}}
 QListWidget::item:selected {{
-    background-color: {ACCENT};
-    color: white;
+    background-color: {ACCENT_DIM};
+    color: {TEXT_PRI};
+    border-left: 2px solid {ACCENT};
 }}
 QListWidget::item:hover {{
-    background-color: {BG_INPUT};
+    background-color: {BG_PANEL};
 }}
 
 /* ── 스크롤바 ───────────────────────────────────────────────────── */
 QScrollBar:vertical {{
-    background-color: {BG_PANEL};
-    width: 8px;
-    border-radius: 4px;
+    background-color: {BG_BASE};
+    width: 6px;
+    border-radius: 3px;
 }}
 QScrollBar::handle:vertical {{
     background-color: {BORDER_LT};
-    border-radius: 4px;
-    min-height: 30px;
+    border-radius: 3px;
+    min-height: 24px;
 }}
 QScrollBar::handle:vertical:hover {{
     background-color: {TEXT_SEC};
 }}
-QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{
-    height: 0px;
-}}
+QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{ height: 0; }}
 QScrollBar:horizontal {{
-    background-color: {BG_PANEL};
-    height: 8px;
-    border-radius: 4px;
+    background-color: {BG_BASE};
+    height: 6px;
+    border-radius: 3px;
 }}
 QScrollBar::handle:horizontal {{
     background-color: {BORDER_LT};
-    border-radius: 4px;
-    min-width: 30px;
+    border-radius: 3px;
+    min-width: 24px;
 }}
+QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {{ width: 0; }}
 
 /* ── 메뉴바 ─────────────────────────────────────────────────────── */
 QMenuBar {{
-    background-color: {BG_BASE};
+    background-color: {BG_PANEL};
     color: {TEXT_PRI};
     border-bottom: 1px solid {BORDER};
-    padding: 2px;
+    padding: 1px;
     font-size: 13px;
 }}
 QMenuBar::item {{
-    padding: 4px 10px;
-    border-radius: 4px;
+    padding: 5px 10px;
+    border-radius: 3px;
 }}
 QMenuBar::item:selected {{
-    background-color: {BG_CARD};
+    background-color: {BG_HOVER};
 }}
 QMenu {{
     background-color: {BG_CARD};
     color: {TEXT_PRI};
-    border: 1px solid {BORDER};
-    border-radius: 6px;
+    border: 1px solid {BORDER_LT};
+    border-radius: 4px;
     padding: 4px;
 }}
 QMenu::item {{
-    padding: 6px 20px;
-    border-radius: 4px;
+    padding: 6px 18px;
+    border-radius: 3px;
 }}
 QMenu::item:selected {{
-    background-color: {ACCENT};
-    color: white;
+    background-color: {ACCENT_DIM};
+    color: {TEXT_PRI};
 }}
 QMenu::separator {{
     height: 1px;
@@ -316,10 +335,10 @@ QMenu::separator {{
 
 /* ── 툴바 ───────────────────────────────────────────────────────── */
 QToolBar {{
-    background-color: {BG_BASE};
+    background-color: {BG_PANEL};
     border-bottom: 1px solid {BORDER};
     spacing: 4px;
-    padding: 4px 8px;
+    padding: 4px 10px;
 }}
 QToolBar::separator {{
     background-color: {BORDER};
@@ -327,108 +346,39 @@ QToolBar::separator {{
     margin: 4px 6px;
 }}
 
-/* ── 도크 ───────────────────────────────────────────────────────── */
-QDockWidget {{
-    color: {TEXT_PRI};
-    titlebar-close-icon: none;
-}}
-QDockWidget::title {{
-    background-color: {BG_BASE};
-    border-bottom: 1px solid {BORDER};
-    padding: 6px 10px;
-    font-size: 11px;
-    font-weight: 600;
-    color: {TEXT_SEC};
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-}}
-
 /* ── 상태바 ─────────────────────────────────────────────────────── */
 QStatusBar {{
-    background-color: {BG_BASE};
+    background-color: {BG_PANEL};
     color: {TEXT_SEC};
     border-top: 1px solid {BORDER};
     font-size: 11px;
-    padding: 2px 8px;
+    padding: 2px 10px;
 }}
 
 /* ── 진행바 ─────────────────────────────────────────────────────── */
 QProgressBar {{
     background-color: {BG_INPUT};
     border: 1px solid {BORDER};
-    border-radius: 4px;
+    border-radius: 3px;
     text-align: center;
-    color: {TEXT_PRI};
+    color: {TEXT_SEC};
     font-size: 11px;
-    min-height: 16px;
+    min-height: 14px;
 }}
 QProgressBar::chunk {{
     background-color: {ACCENT};
-    border-radius: 3px;
+    border-radius: 2px;
 }}
 
-/* ── 분리자 ─────────────────────────────────────────────────────── */
+/* ── QSplitter ──────────────────────────────────────────────────── */
 QSplitter::handle {{
     background-color: {BORDER};
 }}
 QSplitter::handle:horizontal {{
-    width: 2px;
+    width: 1px;
 }}
 QSplitter::handle:vertical {{
-    height: 2px;
-}}
-
-/* ── 라벨 클래스 ────────────────────────────────────────────────── */
-QLabel[class="title"] {{
-    color: {TEXT_PRI};
-    font-size: 16px;
-    font-weight: 700;
-}}
-QLabel[class="subtitle"] {{
-    color: {TEXT_SEC};
-    font-size: 12px;
-}}
-QLabel[class="stat-value"] {{
-    color: {CYAN};
-    font-size: 28px;
-    font-weight: 700;
-}}
-QLabel[class="stat-label"] {{
-    color: {TEXT_SEC};
-    font-size: 11px;
-    text-transform: uppercase;
-    letter-spacing: 0.3px;
-}}
-QLabel[class="metric"] {{
-    color: {TEXT_PRI};
-    font-size: 14px;
-    font-weight: 600;
-}}
-QLabel[class="metric-label"] {{
-    color: {TEXT_SEC};
-    font-size: 12px;
-}}
-QLabel[class="disclaimer"] {{
-    color: {MED_CLR};
-    font-size: 11px;
-    font-weight: 600;
-}}
-QLabel[class="warning"] {{
-    color: {LOW_CLR};
-    font-size: 11px;
-    font-weight: 600;
-}}
-QLabel[class="success"] {{
-    color: {HIGH_CLR};
-    font-size: 11px;
-    font-weight: 600;
-}}
-QLabel[class="section-header"] {{
-    color: {TEXT_SEC};
-    font-size: 11px;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
+    height: 1px;
 }}
 
 /* ── CheckBox ───────────────────────────────────────────────────── */
@@ -437,8 +387,8 @@ QCheckBox {{
     spacing: 6px;
 }}
 QCheckBox::indicator {{
-    width: 16px;
-    height: 16px;
+    width: 15px;
+    height: 15px;
     border: 1px solid {BORDER_LT};
     border-radius: 3px;
     background-color: {BG_INPUT};
@@ -446,5 +396,26 @@ QCheckBox::indicator {{
 QCheckBox::indicator:checked {{
     background-color: {ACCENT};
     border-color: {ACCENT};
+}}
+
+/* ── 스크롤 영역 ────────────────────────────────────────────────── */
+QScrollArea {{
+    border: none;
+    background-color: transparent;
+}}
+
+/* ── 도크 (필요 시) ─────────────────────────────────────────────── */
+QDockWidget {{
+    color: {TEXT_PRI};
+}}
+QDockWidget::title {{
+    background-color: {BG_PANEL};
+    border-bottom: 1px solid {BORDER};
+    padding: 5px 10px;
+    font-size: 10px;
+    font-weight: 600;
+    color: {TEXT_SEC};
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
 }}
 """
