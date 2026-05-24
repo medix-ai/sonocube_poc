@@ -11,17 +11,17 @@ from typing import Any, Dict, List, Optional
 
 import cv2
 import numpy as np
-from PyQt5.QtCore import Qt, QTimer, pyqtSignal
-from PyQt5.QtGui import QColor, QImage, QPixmap
+from PyQt5.QtCore import Qt, QPoint, QTimer, pyqtSignal
+from PyQt5.QtGui import QColor, QImage, QKeySequence, QPainter, QPixmap, QPolygon
 from PyQt5.QtWidgets import (
     QFileDialog, QFrame, QGroupBox, QHBoxLayout, QLabel,
-    QMessageBox, QPushButton, QScrollArea, QSizePolicy,
+    QMessageBox, QPushButton, QScrollArea, QShortcut, QSizePolicy,
     QSlider, QSplitter, QVBoxLayout, QWidget, QComboBox, QLineEdit,
     QStackedWidget,
 )
 
 from gui.ef_curve_widget import EFCurveWidget
-from gui.styles import ef_color, HIGH_CLR, MED_CLR, LOW_CLR, EF_NORMAL, EF_MID, EF_LOW
+from gui.styles import ef_color, HIGH_CLR, MED_CLR, LOW_CLR, EF_NORMAL, EF_MID, EF_LOW, ACCENT, TEXT_SEC
 from utils.constants import APP_NAME, APP_VERSION, DISCLAIMER, CONFIDENCE_COLORS
 
 _SUPPORTED_EXT = {".mp4", ".avi", ".mov", ".mkv", ".dcm", ".dicom"}
@@ -37,8 +37,61 @@ class Divider(QFrame):
         self.setFixedHeight(1) if orientation == Qt.Horizontal else self.setFixedWidth(1)
 
 
+class _EFRangeBar(QWidget):
+    """EF 값을 0-100% 임상 참고 구역에 표시하는 수평 바 (QPainter)"""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setFixedHeight(30)
+        self._ef: Optional[float] = None
+        self._ef_min: Optional[float] = None
+        self._ef_max: Optional[float] = None
+
+    def set_value(self, ef: float, ef_min: float = None, ef_max: float = None):
+        self._ef, self._ef_min, self._ef_max = ef, ef_min, ef_max
+        self.update()
+
+    def clear(self):
+        self._ef = None
+        self.update()
+
+    def paintEvent(self, _):
+        if self._ef is None:
+            return
+        p = QPainter(self)
+        p.setRenderHint(QPainter.Antialiasing)
+        w = self.width()
+        BAR_Y, BAR_H = 14, 10
+
+        def xp(pct):
+            return int(w * max(0.0, min(float(pct), 100.0)) / 100.0)
+
+        p.setPen(Qt.NoPen)
+        p.setBrush(QColor(EF_LOW));    p.drawRect(0, BAR_Y, xp(40), BAR_H)
+        p.setBrush(QColor(EF_MID));    p.drawRect(xp(40), BAR_Y, xp(55) - xp(40), BAR_H)
+        p.setBrush(QColor(EF_NORMAL)); p.drawRect(xp(55), BAR_Y, w - xp(55), BAR_H)
+
+        if self._ef_min is not None and self._ef_max is not None:
+            x1, x2 = xp(self._ef_min), xp(self._ef_max)
+            p.setBrush(QColor(255, 255, 255, 50))
+            p.drawRect(x1, BAR_Y - 2, max(x2 - x1, 2), BAR_H + 4)
+
+        mx = xp(self._ef)
+        p.setBrush(QColor("white"))
+        tri = QPolygon([QPoint(mx - 5, BAR_Y - 1),
+                        QPoint(mx + 5, BAR_Y - 1),
+                        QPoint(mx, BAR_Y + BAR_H + 3)])
+        p.drawPolygon(tri)
+
+        p.setPen(QColor(255, 255, 255, 170))
+        font = p.font(); font.setPointSize(7); p.setFont(font)
+        p.drawText(2,         BAR_Y, xp(40) - 4,            BAR_H, Qt.AlignCenter | Qt.AlignVCenter, "<40%")
+        p.drawText(xp(40)+2,  BAR_Y, xp(55) - xp(40) - 4,  BAR_H, Qt.AlignCenter | Qt.AlignVCenter, "40-54%")
+        p.drawText(xp(55)+2,  BAR_Y, w - xp(55) - 4,        BAR_H, Qt.AlignCenter | Qt.AlignVCenter, "≥55%")
+
+
 class EFDisplay(QWidget):
-    """EF 수치 강조 표시 위젯 — 결과 패널 상단의 핵심 요소"""
+    """EF 수치 강조 표시 위젯 — EF 바 포함"""
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -53,18 +106,26 @@ class EFDisplay(QWidget):
         )
         lo.addWidget(lbl_title)
 
+        val_row = QHBoxLayout()
         self._val = QLabel("--")
-        self._val.setStyleSheet(
-            "color: #f0f0f0; font-size: 52px; font-weight: 700; line-height: 1;"
-        )
-        lo.addWidget(self._val)
+        self._val.setStyleSheet("color: #f0f0f0; font-size: 52px; font-weight: 700;")
+        self._unit = QLabel("  %")
+        self._unit.setStyleSheet("color: #909090; font-size: 16px;")
+        self._unit.setAlignment(Qt.AlignBottom)
+        val_row.addWidget(self._val)
+        val_row.addWidget(self._unit)
+        val_row.addStretch()
+        lo.addLayout(val_row)
 
-        self._unit = QLabel("% (median)")
-        self._unit.setStyleSheet("color: #909090; font-size: 11px;")
-        lo.addWidget(self._unit)
+        # EF 범위 바
+        self._bar = _EFRangeBar()
+        lo.addWidget(self._bar)
 
-        lo.addSpacing(8)
+        lbl_ref = QLabel("Reference: <40% Reduced  ·  40–54% Mildly Reduced  ·  ≥55% Normal")
+        lbl_ref.setStyleSheet("color: #505050; font-size: 9px;")
+        lo.addWidget(lbl_ref)
 
+        lo.addSpacing(6)
         row = QHBoxLayout()
         self._mean_lbl = QLabel("Mean --")
         self._std_lbl  = QLabel("Std --")
@@ -86,20 +147,22 @@ class EFDisplay(QWidget):
             self._mean_lbl.setText("Mean --")
             self._std_lbl.setText("Std --")
             self._rng_lbl.setText("Range --")
+            self._bar.clear()
             return
         color = ef_color(ef)
         self._val.setText(f"{ef:.1f}")
         self._val.setStyleSheet(f"color: {color}; font-size: 52px; font-weight: 700;")
+        self._bar.set_value(ef, ef_min, ef_max)
         self._mean_lbl.setText(f"Mean {ef_mean:.1f}%" if ef_mean is not None else "Mean --")
-        self._std_lbl.setText(f"Std ±{ef_std:.1f}%" if ef_std is not None else "Std --")
+        self._std_lbl.setText(f"±{ef_std:.2f}%" if ef_std is not None else "Std --")
         if ef_min is not None and ef_max is not None:
-            self._rng_lbl.setText(f"Range {ef_min:.1f}–{ef_max:.1f}%")
+            self._rng_lbl.setText(f"{ef_min:.1f}–{ef_max:.1f}%")
         else:
             self._rng_lbl.setText("Range --")
 
 
 class StabilityIndicator(QWidget):
-    """Prediction Stability 표시 — 도트 + 텍스트"""
+    """Prediction Stability 표시 — 도트 + 레벨 + std 수치"""
 
     _DOTS = 5
     _FILLS = {"High": 5, "Medium": 3, "Low": 1, "Unknown": 0}
@@ -107,9 +170,12 @@ class StabilityIndicator(QWidget):
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        lo = QHBoxLayout(self)
+        lo = QVBoxLayout(self)
         lo.setContentsMargins(0, 0, 0, 0)
-        lo.setSpacing(6)
+        lo.setSpacing(3)
+
+        top_row = QHBoxLayout()
+        top_row.setSpacing(6)
 
         dots_row = QHBoxLayout()
         dots_row.setSpacing(4)
@@ -119,22 +185,31 @@ class StabilityIndicator(QWidget):
             d.setStyleSheet("font-size: 10px; color: #404040;")
             dots_row.addWidget(d)
             self._dots.append(d)
-        lo.addLayout(dots_row)
+        top_row.addLayout(dots_row)
 
-        self._lbl = QLabel("Stability: --")
+        self._lbl = QLabel("--")
         self._lbl.setStyleSheet("color: #909090; font-size: 12px; font-weight: 600;")
-        lo.addWidget(self._lbl)
-        lo.addStretch()
+        top_row.addWidget(self._lbl)
+        top_row.addStretch()
+        lo.addLayout(top_row)
 
-    def update(self, level: str):
-        fill = self._FILLS.get(level, 0)
+        self._detail = QLabel("")
+        self._detail.setStyleSheet("color: #606060; font-size: 10px;")
+        lo.addWidget(self._detail)
+
+    def update(self, level: str, ef_std: float = None, frame_count: int = None):
+        fill  = self._FILLS.get(level, 0)
         color = self._COLORS.get(level, "#505050")
         for i, d in enumerate(self._dots):
-            d.setStyleSheet(
-                f"font-size: 10px; color: {color if i < fill else '#404040'};"
-            )
-        self._lbl.setText(f"Stability: {level}")
+            d.setStyleSheet(f"font-size: 10px; color: {color if i < fill else '#404040'};")
+        self._lbl.setText(level or "--")
         self._lbl.setStyleSheet(f"color: {color}; font-size: 12px; font-weight: 600;")
+        parts = []
+        if ef_std is not None:
+            parts.append(f"EF std ±{ef_std:.2f}%")
+        if frame_count is not None:
+            parts.append(f"{frame_count} frames")
+        self._detail.setText("  ·  ".join(parts) if parts else "")
 
 
 class FrameLabel(QLabel):
@@ -157,15 +232,20 @@ class FrameLabel(QLabel):
     def show_frame(self, frame: np.ndarray, label: str = ""):
         if frame is None:
             return
+        # 0-1 float 프레임을 0-255 uint8로 변환
+        if frame.dtype != np.uint8:
+            frame = np.clip(frame * 255, 0, 255).astype(np.uint8)
         h, w = frame.shape[:2]
         if frame.ndim == 2:
-            q_img = QImage(frame.data, w, h, w, QImage.Format_Grayscale8)
+            buf = np.ascontiguousarray(frame)
+            q_img = QImage(buf.data, w, h, w, QImage.Format_Grayscale8)
         elif frame.shape[2] == 4:
-            rgb = cv2.cvtColor(frame, cv2.COLOR_RGBA2RGB)
-            q_img = QImage(rgb.data, w, h, w * 3, QImage.Format_RGB888)
+            buf = np.ascontiguousarray(cv2.cvtColor(frame, cv2.COLOR_RGBA2RGB))
+            q_img = QImage(buf.data, w, h, w * 3, QImage.Format_RGB888)
         else:
-            rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB) if frame.shape[2] == 3 else frame
-            q_img = QImage(rgb.data, w, h, w * 3, QImage.Format_RGB888)
+            # load_video에서 이미 RGB로 변환됨 → 추가 변환 불필요
+            buf = np.ascontiguousarray(frame)
+            q_img = QImage(buf.data, w, h, w * 3, QImage.Format_RGB888)
         pix = QPixmap.fromImage(q_img).scaled(
             self.width(), self.height(), Qt.KeepAspectRatio, Qt.SmoothTransformation
         )
@@ -198,6 +278,32 @@ class StudyPanel(QWidget):
         self._es_idx = 0
         self._result: Optional[Dict[str, Any]] = None
         self._build_ui()
+        self._setup_shortcuts()
+
+    def _setup_shortcuts(self):
+        """키보드 단축키 등록"""
+        def sc(key, fn):
+            s = QShortcut(QKeySequence(key), self)
+            s.setContext(Qt.WidgetWithChildrenShortcut)
+            s.activated.connect(fn)
+
+        sc(Qt.Key_Left,  self._prev_frame)
+        sc(Qt.Key_Right, self._next_frame)
+        sc(Qt.Key_Home,  lambda: self._goto(0))
+        sc(Qt.Key_End,   lambda: self._goto(max(0, len(self._frames) - 1)))
+        sc("E",          lambda: self._goto(self._ed_idx))  # Jump to ED
+        sc("S",          lambda: self._goto(self._es_idx))  # Jump to ES
+        sc("Ctrl+E",     self._set_ed)    # Set current as ED
+        sc("Ctrl+D",     self._set_es)    # Set current as ES (Ctrl+S는 save와 충돌)
+        sc("Space",      self._on_start)  # Start analysis
+
+    def _prev_frame(self):
+        if self._frames:
+            self.slider.setValue(max(0, self.slider.value() - 1))
+
+    def _next_frame(self):
+        if self._frames:
+            self.slider.setValue(min(len(self._frames) - 1, self.slider.value() + 1))
 
     # ── UI 구성 ────────────────────────────────────────────────────────────────
 
@@ -297,14 +403,17 @@ class StudyPanel(QWidget):
         export_lo = QVBoxLayout(export_grp)
         export_lo.setSpacing(5)
 
+        self.btn_preview   = self._export_btn("Preview Results")
         self.btn_open_pdf  = self._export_btn("Open PDF Report")
         self.btn_open_json = self._export_btn("Open JSON")
         self.btn_regen_pdf = self._export_btn("Regenerate PDF")
-        for b in (self.btn_open_pdf, self.btn_open_json, self.btn_regen_pdf):
+        for b in (self.btn_preview, self.btn_open_pdf,
+                  self.btn_open_json, self.btn_regen_pdf):
             b.setFixedHeight(26)
             b.setEnabled(False)
             export_lo.addWidget(b)
 
+        self.btn_preview.clicked.connect(self._show_preview)
         self.btn_open_pdf.clicked.connect(self._open_pdf)
         self.btn_open_json.clicked.connect(self._open_json)
         self.btn_regen_pdf.clicked.connect(self._regen_pdf)
@@ -648,6 +757,7 @@ class StudyPanel(QWidget):
         self._update_right_panel(result)
 
         # export 버튼 활성화
+        self.btn_preview.setEnabled(True)
         self.btn_open_pdf.setEnabled(bool(result.get("report_path")))
         self.btn_open_json.setEnabled(bool(result.get("json_path")))
         self.btn_regen_pdf.setEnabled(True)
@@ -670,7 +780,8 @@ class StudyPanel(QWidget):
         self.ef_display.update(ef, ef_mean, ef_std, ef_min, ef_max)
 
         # Stability
-        self.stability_ind.update(conf)
+        frame_count = result.get("metadata", {}).get("num_frames")
+        self.stability_ind.update(conf, ef_std=ef_std, frame_count=frame_count)
         if conf == "Low":
             self.lbl_low_warn.setText(
                 "Frame-to-frame EF variability is high.\n"
@@ -692,28 +803,52 @@ class StudyPanel(QWidget):
         self.lbl_latency.setText(f"Latency: {latency:.2f}s" if latency else "Latency: --")
 
     def _update_quality_warnings(self, quality: Dict[str, Any]):
-        # 기존 경고 클리어
         while self.qw_list.count():
             item = self.qw_list.takeAt(0)
             if item.widget():
                 item.widget().deleteLater()
 
         warnings = quality.get("warnings", [])
-        level = quality.get("quality_level", "good")
+        level    = quality.get("quality_level", "good")
 
         if not warnings:
             self.qw_status.setText("●  Image quality: Good")
             self.qw_status.setStyleSheet("color: #52c27a; font-size: 12px; font-weight: 600;")
-        else:
-            colors_map = {"poor": "#e05252", "moderate": "#e8a217"}
-            c = colors_map.get(level, "#e8a217")
-            self.qw_status.setText(f"●  {len(warnings)} warning(s) found")
-            self.qw_status.setStyleSheet(f"color: {c}; font-size: 12px; font-weight: 600;")
-            for w in warnings:
-                lbl = QLabel(f"• {w}")
-                lbl.setWordWrap(True)
-                lbl.setStyleSheet("color: #909090; font-size: 10px; padding: 2px 0;")
-                self.qw_list.addWidget(lbl)
+            return
+
+        color_map = {"poor": "#e05252", "moderate": "#e8a217"}
+        c = color_map.get(level, "#e8a217")
+        self.qw_status.setText(f"●  {len(warnings)} quality warning(s)")
+        self.qw_status.setStyleSheet(f"color: {c}; font-size: 12px; font-weight: 600;")
+
+        for msg in warnings:
+            sev, icon = _warning_severity(msg)
+            sev_color = {"high": "#e05252", "moderate": "#e8a217", "info": "#707070"}[sev]
+
+            card = QWidget()
+            card_lo = QVBoxLayout(card)
+            card_lo.setContentsMargins(8, 6, 8, 6)
+            card_lo.setSpacing(2)
+            card.setStyleSheet(
+                f"background-color: #222222; border-left: 3px solid {sev_color};"
+                "border-radius: 2px; margin-top: 3px;"
+            )
+
+            # 심각도 + 첫 문장 (제목)
+            title_text, action_text = _split_warning(msg)
+            lbl_title = QLabel(f"{icon} {title_text}")
+            lbl_title.setWordWrap(True)
+            lbl_title.setStyleSheet(f"color: {sev_color}; font-size: 10px; font-weight: 600;")
+            card_lo.addWidget(lbl_title)
+
+            # 행동 지침 (→ 이후 부분)
+            if action_text:
+                lbl_action = QLabel(f"→ {action_text}")
+                lbl_action.setWordWrap(True)
+                lbl_action.setStyleSheet("color: #808080; font-size: 10px;")
+                card_lo.addWidget(lbl_action)
+
+            self.qw_list.addWidget(card)
 
     # ── 뷰어 컨트롤 ──────────────────────────────────────────────────────────
 
@@ -728,6 +863,9 @@ class StudyPanel(QWidget):
             return
 
         frame = self._frames[idx].copy()
+        # float(0-1) 프레임 대비 안전하게 uint8 스케일로 통일
+        if frame.dtype != np.uint8:
+            frame = np.clip(frame * 255, 0, 255).astype(np.uint8)
         brt = self.brt_slider.value()
         cst = self.cst_slider.value() / 100.0
         frame = np.clip(frame.astype(np.float32) * cst + brt, 0, 255).astype(np.uint8)
@@ -792,6 +930,13 @@ class StudyPanel(QWidget):
 
     # ── 내보내기 ─────────────────────────────────────────────────────────────
 
+    def _show_preview(self):
+        if not self._result:
+            return
+        from gui.report_preview_dialog import ReportPreviewDialog
+        dlg = ReportPreviewDialog(self._result, parent=self)
+        dlg.exec_()
+
     def _open_pdf(self):
         self._open_file(self._result.get("report_path") if self._result else None)
 
@@ -829,6 +974,32 @@ class StudyPanel(QWidget):
 
 
 # ── 내부 유틸 위젯 ─────────────────────────────────────────────────────────────
+
+def _warning_severity(msg: str):
+    """경고 문자열 → (severity, icon) 반환"""
+    m = msg.lower()
+    if any(k in m for k in ["very short", "high failed", "high frame-to-frame ef variability"]):
+        return "high", "▲"
+    if any(k in m for k in ["short clip", "low brightness", "low image contrast",
+                              "high frame blur", "moderate ef variability",
+                              "some frames could not"]):
+        return "moderate", "!"
+    return "info", "ℹ"
+
+
+def _split_warning(msg: str):
+    """경고 메시지를 '제목 + 행동 지침'으로 분리"""
+    # " — " 또는 "consider" 기준으로 분리
+    for sep in [" — ", ". Adjust ", ". Check ", ". Re-acquire ", ". Results "]:
+        if sep in msg:
+            parts = msg.split(sep, 1)
+            return parts[0].strip(), parts[1].strip()
+    # 마지막 문장을 행동 지침으로
+    sentences = [s.strip() for s in msg.split(".") if s.strip()]
+    if len(sentences) > 1:
+        return sentences[0] + ".", " ".join(sentences[1:])
+    return msg, ""
+
 
 class _DropZone(QLabel):
     """파일 Drag-and-Drop 영역"""

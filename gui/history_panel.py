@@ -116,21 +116,23 @@ class HistoryPanel(QWidget):
         self._lbl_count.setText(f"{total} case(s) total")
 
     def _make_row(self, e: Dict[str, Any]) -> List[QStandardItem]:
-        ef = e.get("estimated_ef_median") or e.get("ef_median")
+        ef = e.get("ef") or e.get("estimated_ef_median") or e.get("ef_median")
         ef_str = f"{ef:.1f}" if ef is not None else "—"
         ef_color = _ef_color(ef) if ef is not None else TEXT_SEC
 
         stability = e.get("confidence_level", e.get("stability", "—"))
         view = e.get("view_type", "—")
 
-        ts_raw = e.get("analysis_timestamp", "")
+        # worker.py → "date", batch_worker.py → "date" (구버전 호환: "analysis_timestamp")
+        ts_raw = e.get("date", e.get("analysis_timestamp", ""))
         date_str = ts_raw[:16].replace("T", " ") if ts_raw else "—"
 
-        file_name = Path(e.get("input_file", "")).name or "—"
+        # worker.py → "file", batch_worker.py → "file" (구버전 호환: "input_file")
+        file_name = e.get("file") or Path(e.get("input_file", "")).name or "—"
 
         items = [
             _item(e.get("case_id", "—")),
-            _item(file_name, tooltip=e.get("input_file", "")),
+            _item(file_name, tooltip=e.get("file", e.get("input_file", ""))),
             _item(ef_str, fg=ef_color, align=Qt.AlignCenter),
             _item(stability, fg=_stability_color(stability), align=Qt.AlignCenter),
             _item(view, align=Qt.AlignCenter),
@@ -148,9 +150,9 @@ class HistoryPanel(QWidget):
 
     def _history_index_for_entry(self, entry: Dict[str, Any]) -> int:
         """Return index in self._history (as loaded) matching entry by case_id+timestamp."""
-        key = (entry.get("case_id"), entry.get("analysis_timestamp"))
+        key = (entry.get("case_id"), entry.get("date", entry.get("analysis_timestamp")))
         for i, e in enumerate(self._history):
-            if (e.get("case_id"), e.get("analysis_timestamp")) == key:
+            if (e.get("case_id"), e.get("date", e.get("analysis_timestamp"))) == key:
                 return i
         return -1
 
@@ -180,7 +182,6 @@ class HistoryPanel(QWidget):
             entry.get("case_id", "")))
         menu.addSeparator()
         act_del = menu.addAction("Delete Entry")
-        act_del.setProperty("class", "danger")
         act_del.triggered.connect(lambda: self._delete_entry(entry))
         menu.exec_(self._table.viewport().mapToGlobal(pos))
 

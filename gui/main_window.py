@@ -205,6 +205,7 @@ class MainWindow(QMainWindow):
         self.btn_open.setEnabled(False)
         self.progress_bar.setVisible(True)
         self.lbl_progress.setText("Starting…")
+        self.study_panel.set_analyzing(True, "Starting…")
 
         s = self._settings
         output_dir_str = s.get("output_dir", "")

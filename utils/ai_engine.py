@@ -9,8 +9,6 @@ import json
 import logging
 
 from utils.io import load_echo_clip
-from utils.preprocess import preprocess_frames
-from utils.ef import calculate_ef
 from utils.spec import resource_path, MODEL_DIR
 
 logger = logging.getLogger(__name__)
@@ -161,19 +159,17 @@ class SonoCubeEngine:
         if not self.model_loaded:
             logger.warning("Model not loaded, returning dummy results")
             return self._dummy_inference(video, metadata)
-        
-        # 전처리
-        processed_video = self._preprocess_video(video)
-        
-        # Inference
+
+        # ONNX: _infer_onnx 내부에서 리사이즈+정규화 직접 수행 → _preprocess_video 건너뜀
+        # PyTorch: _preprocess_video 필요
         if self.model["type"] == "onnx":
-            results = self._infer_onnx(processed_video)
+            results = self._infer_onnx(video)
         elif self.model["type"] == "pytorch":
+            processed_video = self._preprocess_video(video)
             results = self._infer_pytorch(processed_video)
         else:
             return self._dummy_inference(video, metadata)
-        
-        # 후처리 및 결과 정리
+
         return self._postprocess_results(results, video.shape, metadata)
     
     def _preprocess_video(self, video: np.ndarray) -> np.ndarray:
@@ -404,16 +400,14 @@ def analyze_clip(video_path: Path, model_dir: Optional[Path] = None) -> Dict[str
     Returns:
         분석 결과 딕셔너리
     """
-    # 1. 영상 로드
+    # 1. 영상 로드 (raw RGB uint8 프레임)
     frames, fps = load_echo_clip(video_path)
-    
-    # 2. 전처리 (기본)
-    processed_frames = preprocess_frames(frames)
-    
-    # 3. AI Engine 초기화 및 inference
+
+    # 2. AI Engine 초기화 및 inference
+    # 정규화/리사이즈는 _infer_onnx 내부에서 수행 — 여기서 preprocess 불필요
     engine = SonoCubeEngine(model_dir)
-    video_array = np.array(processed_frames)
-    
+    video_array = np.array(frames)
+
     # Inference
     results = engine.infer(video_array, metadata={"fps": fps, "file_path": str(video_path)})
     
@@ -429,7 +423,7 @@ def analyze_clip(video_path: Path, model_dir: Optional[Path] = None) -> Dict[str
         ed_mask = None
         es_mask = None
         ed_idx = 0
-        es_idx = len(processed_frames) // 2
+        es_idx = len(frames) // 2
     
     from utils.constants import get_confidence_level, UNSUPPORTED_METRICS
 
@@ -442,9 +436,9 @@ def analyze_clip(video_path: Path, model_dir: Optional[Path] = None) -> Dict[str
     }
 
     return {
-        "frames": processed_frames,
+        "frames": frames,  # raw RGB uint8 — 화면 표시용
         "ed_frame_idx": results.get("ed_frame_idx", 0),
-        "es_frame_idx": results.get("es_frame_idx", len(processed_frames) // 2),
+        "es_frame_idx": results.get("es_frame_idx", len(frames) // 2),
         "ef": results.get("ef", 0.0),
         "ef_mean": results.get("ef_mean", 0.0),
         "ef_std": ef_std,
@@ -463,8 +457,8 @@ def analyze_clip(video_path: Path, model_dir: Optional[Path] = None) -> Dict[str
         "volume_info": {"edv": None, "esv": None},
         "fps": fps,
         "metadata": {
-            "num_frames": len(processed_frames),
-            "frame_size": processed_frames[0].shape[:2] if processed_frames else (224, 224),
+            "num_frames": len(frames),
+            "frame_size": frames[0].shape[:2] if frames else (0, 0),
             "file_path": str(video_path)
         }
     }

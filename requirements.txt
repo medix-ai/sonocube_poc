@@ -13,30 +13,26 @@ Pillow>=8.0.0
 # DICOM 지원
 pydicom>=2.2.0
 
-# 3D 처리 및 시각화
-open3d>=0.13.0
-pyvista>=0.32.0
-pyvistaqt>=0.6.0
-vtk>=9.0.0
-scikit-image>=0.19.0
-scipy>=1.8.0
-
 # 2D 시각화
 matplotlib>=3.4.0
 
 # PDF 리포트
 reportlab>=3.6.0
 
-# AI 모델 inference
+# AI 모델 inference (ONNX Runtime)
 onnxruntime>=1.12.0
-torch>=1.12.0
-torchvision>=0.13.0
+
+# 통계
+scipy>=1.8.0
 
 # 패키징
 pyinstaller>=5.0.0
 
-# 개발 도구 (옵션)
+# 개발/테스트 (옵션)
 pytest>=7.0.0
 black>=22.0.0
 flake8>=4.0.0
 
+# PyTorch (세그멘테이션 모델 학습/변환 시 필요, inference 전용이면 불필요)
+# torch>=1.12.0
+# torchvision>=0.13.0
