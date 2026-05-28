@@ -80,7 +80,7 @@ coll = COLLECT(
 app = BUNDLE(
     coll,
     name='SonoCube.app',
-    icon=None,  # TODO: '../gui/assets/sonocube.icns' 아이콘 준비 후 교체
+    icon='../gui/assets/sonocube.icns',
     bundle_identifier='com.sonocube.poc',
     info_plist={
         'NSPrincipalClass': 'NSApplication',
