@@ -388,28 +388,370 @@ class SonoCubeEngine:
         }
 
 
+MODEL_REGISTRY = {
+    "sonocube": {
+        "label":       "SonoCube PoC (w_075)",
+        "description": "경량 프레임별 CNN. 정상 EF(55–70%) 범위에서만 참고 가능.",
+        "dir":         "model/w_075",
+        "type":        "frame",
+        "params":      "14,569",
+        "val_mae":     "~9.4%",
+        "limitation":  "낮은 EF(<40%) 예측 불가. PoC 단계 모델.",
+    },
+    "sonocube_v2": {
+        "label":       "SonoCube V2 (ED/ES pair)",
+        "description": "ED·ES 프레임 쌍 입력 CNN. EchoNet test MAE 8.76%, r=0.534.",
+        "dir":         "model/v2",
+        "type":        "pair",
+        "params":      "~15K",
+        "val_mae":     "8.76% (r=0.534)",
+        "limitation":  "ED/ES 자동 검출 기반. PoC 단계 모델.",
+    },
+    "echonet": {
+        "label":       "R2Plus1D Linear Probe (Kinetics→EchoNet)",
+        "description": "Kinetics pretrained 비디오 백본 + EchoNet linear probe.",
+        "dir":         "model/echonet",
+        "type":        "clip",
+        "params":      "31.5M",
+        "val_mae":     "~12.2% (r=0.36)",
+        "limitation":  "선형 헤드만 echo 데이터로 calibration. 임상 사용 불가.",
+    },
+}
+
+
+class LVSegEngine:
+    """
+    경량 U-Net LV 세그멘테이션 엔진.
+    입력: grayscale 프레임 (H,W) → 출력: LV 마스크 (H,W) float32 [0,1]
+
+    모델 없으면 None 반환 — SonoCubeV2Engine이 brightness heuristic으로 폴백.
+    """
+
+    IMG_SIZE = 96
+
+    def __init__(self, model_dir: Optional[Path] = None):
+        self.model_dir = Path(model_dir) if model_dir else Path("model/lvseg")
+        self.session = None
+        self._load_model()
+
+    def _load_model(self):
+        onnx_files = list(self.model_dir.rglob("*.onnx"))
+        if not onnx_files:
+            logger.info("LVSegEngine: 모델 없음 — brightness heuristic으로 폴백")
+            return
+        try:
+            import onnxruntime as ort
+            path = sorted(onnx_files)[-1]
+            self.session = ort.InferenceSession(str(path), providers=["CPUExecutionProvider"])
+            logger.info(f"LVSegEngine loaded: {path}")
+        except Exception as e:
+            logger.error(f"LVSegEngine load failed: {e}")
+
+    @property
+    def available(self) -> bool:
+        return self.session is not None
+
+    def segment_frame(self, frame: np.ndarray) -> Optional[np.ndarray]:
+        """단일 프레임 → LV 마스크 (IMG_SIZE×IMG_SIZE float32). 실패 시 None."""
+        if not self.available:
+            return None
+        try:
+            import cv2
+            gray = frame[:, :, 0] if len(frame.shape) == 3 else frame
+            resized = cv2.resize(gray, (self.IMG_SIZE, self.IMG_SIZE)).astype(np.float32) / 255.0
+            inp = resized[np.newaxis, np.newaxis]  # (1,1,H,W)
+            out = self.session.run(None, {"frame": inp})
+            return out[0][0, 0]  # (H,W) float32
+        except Exception as e:
+            logger.error(f"LVSegEngine segment_frame error: {e}")
+            return None
+
+    def segment_frames(self, frames: List[np.ndarray]) -> Optional[List[np.ndarray]]:
+        """모든 프레임 세그멘테이션. 실패 시 None."""
+        if not self.available:
+            return None
+        masks = [self.segment_frame(f) for f in frames]
+        if any(m is None for m in masks):
+            return None
+        return masks
+
+    def find_ed_es(self, frames: List[np.ndarray]) -> Tuple[int, int]:
+        """
+        세그멘테이션 기반 ED/ES 검출.
+
+        알고리즘:
+          1. 전체 LV 면적 곡선을 약간 스무딩
+          2. ED = 첫 번째 局所 최대 (이완기 말, 가장 넓은 LV)
+          3. ES = ED 이후 최초 局所 최소 (수축기 말, 가장 좁은 LV)
+          → ED < ES (시간 순서) 항상 보장
+        모델 없으면 brightness heuristic으로 폴백.
+        """
+        masks = self.segment_frames(frames)
+        if masks is None:
+            return _brightness_ed_es(frames)
+
+        areas = np.array([float((m > 0.5).sum()) for m in masks])
+        n = len(areas)
+
+        # 노이즈 제거용 이동평균 (커널 크기: ~10% of video)
+        k = max(3, n // 10)
+        if k % 2 == 0:
+            k += 1
+        pad = k // 2
+        smoothed = np.convolve(areas, np.ones(k) / k, mode="full")[pad: pad + n]
+
+        # ED: 첫 번째 局所 최대 (앞 50% 이내에서 탐색)
+        search_end = max(n // 2, 5)
+        ed_idx = int(np.argmax(smoothed[:search_end]))
+
+        # ES: ED 이후 구간에서 局所 최소 (한 심장 주기 = ~30-60프레임 가정)
+        cycle_len = max(n // 4, 10)
+        es_search_start = ed_idx + 3                          # ED 직후 3프레임 건너뜀
+        es_search_end   = min(ed_idx + cycle_len, n)
+        if es_search_start < es_search_end:
+            es_idx = es_search_start + int(np.argmin(smoothed[es_search_start:es_search_end]))
+        else:
+            es_idx = min(ed_idx + max(n // 4, 1), n - 1)
+
+        logger.info(f"LVSeg ED/ES: ed={ed_idx}(area={areas[ed_idx]:.0f}) "
+                    f"es={es_idx}(area={areas[es_idx]:.0f})")
+        return ed_idx, es_idx
+
+
+def _brightness_ed_es(frames: List[np.ndarray]) -> Tuple[int, int]:
+    """중심 영역 평균 밝기 기반 ED/ES 추정 (LVSegEngine 폴백용)."""
+    h, w = frames[0].shape[:2]
+    cy, cx = h // 2, w // 2
+    rh, rw = h // 6, w // 6
+    means = []
+    for f in frames:
+        gray = f[:, :, 0] if len(f.shape) == 3 else f
+        means.append(float(gray[cy - rh: cy + rh, cx - rw: cx + rw].mean()))
+    ed_idx = int(np.argmin(means))
+    es_idx = int(np.argmax(means))
+    if ed_idx == es_idx:
+        es_idx = min(ed_idx + max(len(frames) // 4, 1), len(frames) - 1)
+    return ed_idx, es_idx
+
+
+_lvseg_engine: Optional["LVSegEngine"] = None
+
+
+def get_lvseg_engine() -> "LVSegEngine":
+    """LVSegEngine 싱글톤 — 앱 전역에서 한 번만 로드."""
+    global _lvseg_engine
+    if _lvseg_engine is None:
+        _lvseg_engine = LVSegEngine()
+    return _lvseg_engine
+
+
+class SonoCubeV2Engine:
+    """SonoCubeV2 — ED/ES 프레임 쌍 (1,6,96,96) → 단일 EF 예측."""
+
+    IMG_SIZE = 96
+
+    def __init__(self, model_dir: Optional[Path] = None):
+        self.model_dir = Path(model_dir) if model_dir else Path("model/v2")
+        self.model = None
+        self.model_loaded = False
+        self._load_model()
+
+    def _load_model(self):
+        onnx_files = list(self.model_dir.rglob("*.onnx"))
+        if not onnx_files:
+            logger.warning("SonoCubeV2 ONNX 없음")
+            return
+        try:
+            import onnxruntime as ort
+            path = sorted(onnx_files)[-1]
+            self.model = ort.InferenceSession(str(path), providers=["CPUExecutionProvider"])
+            self.model_loaded = True
+            logger.info(f"SonoCubeV2Engine loaded: {path}")
+        except Exception as e:
+            logger.error(f"SonoCubeV2Engine load failed: {e}")
+
+    def _find_ed_es(self, frames: List[np.ndarray]) -> Tuple[int, int]:
+        """LVSegEngine(세그멘테이션 기반) → 실패 시 brightness heuristic 폴백."""
+        return get_lvseg_engine().find_ed_es(frames)
+
+    def _to_chw(self, frame: np.ndarray) -> np.ndarray:
+        """(H,W[,C]) → (3, IMG_SIZE, IMG_SIZE) float32 [0,1]"""
+        import cv2
+        if len(frame.shape) == 2:
+            frame = np.stack([frame] * 3, axis=-1)
+        elif frame.shape[-1] == 1:
+            frame = np.concatenate([frame] * 3, axis=-1)
+        r = cv2.resize(frame, (self.IMG_SIZE, self.IMG_SIZE)).astype(np.float32) / 255.0
+        return r.transpose(2, 0, 1)
+
+    def infer(self, frames: List[np.ndarray]) -> Dict[str, Any]:
+        if not self.model_loaded:
+            return {"ef": None, "ef_mean": None, "ef_std": 0.0,
+                    "ef_min": None, "ef_max": None, "framewise_ef": [], "error": "model_not_loaded"}
+        try:
+            seg = get_lvseg_engine()
+            ed_idx, es_idx = self._find_ed_es(frames)
+            ed_t = self._to_chw(frames[ed_idx])
+            es_t = self._to_chw(frames[es_idx])
+            pair = np.concatenate([ed_t, es_t], axis=0)[np.newaxis].astype(np.float32)
+
+            input_name = self.model.get_inputs()[0].name
+            out = self.model.run(None, {input_name: pair})
+            ef = float(out[0][0, 0])
+
+            # ED/ES 프레임 LV 마스크 — UI overlay용 (원본 해상도로 리사이즈)
+            import cv2
+            h, w = frames[ed_idx].shape[:2]
+            ed_mask = es_mask = None
+            if seg.available:
+                _ed = seg.segment_frame(frames[ed_idx])
+                _es = seg.segment_frame(frames[es_idx])
+                if _ed is not None:
+                    ed_mask = cv2.resize(_ed, (w, h), interpolation=cv2.INTER_LINEAR)
+                if _es is not None:
+                    es_mask = cv2.resize(_es, (w, h), interpolation=cv2.INTER_LINEAR)
+
+            return {
+                "ef": ef, "ef_mean": ef, "ef_std": 0.0,
+                "ef_min": ef, "ef_max": ef,
+                "framewise_ef": [ef],
+                "ed_frame_idx": ed_idx,
+                "es_frame_idx": es_idx,
+                "lv_masks": {"ed": ed_mask, "es": es_mask, "all": []},
+            }
+        except Exception as e:
+            logger.error(f"SonoCubeV2Engine infer error: {e}")
+            return {"ef": None, "ef_mean": None, "ef_std": 0.0,
+                    "ef_min": None, "ef_max": None, "framewise_ef": [], "error": str(e)}
+
+
+class EchoNetEngine:
+    """R2Plus1D clip-level ONNX 엔진 — 32프레임 클립 입력, 단일 EF 출력."""
+
+    N_FRAMES = 32
+    IMG_SIZE = 112
+    MEAN = np.array([0.43216, 0.394666, 0.37645], dtype=np.float32)
+    STD  = np.array([0.22803, 0.22145, 0.216989], dtype=np.float32)
+
+    def __init__(self, model_dir: Optional[Path] = None):
+        self.model_dir = Path(model_dir) if model_dir else Path("model/echonet")
+        self.model = None
+        self.model_loaded = False
+        self._load_model()
+
+    def _load_model(self):
+        onnx_files = list(self.model_dir.rglob("*.onnx"))
+        if not onnx_files:
+            logger.warning("EchoNet ONNX 없음 — linear probe 미완료?")
+            return
+        try:
+            import onnxruntime as ort
+            path = sorted(onnx_files)[-1]
+            self.model = ort.InferenceSession(str(path), providers=["CPUExecutionProvider"])
+            self.model_loaded = True
+            logger.info(f"EchoNetEngine loaded: {path}")
+        except Exception as e:
+            logger.error(f"EchoNetEngine load failed: {e}")
+
+    def _sample_clip(self, frames: List[np.ndarray]) -> np.ndarray:
+        """프레임 목록 → 정규화된 (1, 3, 32, 112, 112) 클립 텐서."""
+        import cv2
+        total = len(frames)
+        indices = np.linspace(0, total - 1, self.N_FRAMES, dtype=int)
+        clip = []
+        for idx in indices:
+            f = frames[min(idx, total - 1)]
+            f_resized = cv2.resize(f, (self.IMG_SIZE, self.IMG_SIZE)).astype(np.float32) / 255.0
+            f_norm = (f_resized - self.MEAN) / self.STD
+            clip.append(f_norm)
+        clip_arr = np.stack(clip, axis=0)                     # (32, H, W, 3)
+        clip_arr = clip_arr.transpose(3, 0, 1, 2)[np.newaxis]  # (1, 3, 32, H, W)
+        return clip_arr.astype(np.float32)
+
+    def infer(self, frames: List[np.ndarray]) -> Dict[str, Any]:
+        if not self.model_loaded:
+            return {"ef": None, "ef_mean": None, "ef_std": 0.0,
+                    "ef_min": None, "ef_max": None, "framewise_ef": [], "error": "model_not_loaded"}
+        try:
+            clip = self._sample_clip(frames)
+            out  = self.model.run(None, {"clip": clip})
+            ef   = float(out[0][0, 0])
+            return {
+                "ef": ef, "ef_mean": ef, "ef_std": 0.0,
+                "ef_min": ef, "ef_max": ef,
+                "framewise_ef": [ef],
+                "ed_frame_idx": 0,
+                "es_frame_idx": len(frames) // 2,
+                "lv_masks": [],
+            }
+        except Exception as e:
+            logger.error(f"EchoNetEngine infer error: {e}")
+            return {"ef": None, "ef_mean": None, "ef_std": 0.0,
+                    "ef_min": None, "ef_max": None, "framewise_ef": [], "error": str(e)}
+
+
+def simpson_ef_from_masks(ed_mask: np.ndarray, es_mask: np.ndarray) -> Optional[float]:
+    """
+    마스크 면적 비율로 근사 EF 계산 (Simpson's single-plane 간략 버전).
+    EDV ∝ A_ed^1.5,  ESV ∝ A_es^1.5  (원형 단면 가정)
+    EF = (EDV - ESV) / EDV × 100
+    마스크가 없거나 면적이 0이면 None 반환.
+    """
+    m = compute_simpson_metrics(ed_mask, es_mask)
+    return m["ef"] if m else None
+
+
+def compute_simpson_metrics(ed_mask: np.ndarray, es_mask: np.ndarray) -> Optional[Dict[str, float]]:
+    """
+    마스크 면적으로 Simpson EF + 상대적 EDV/ESV 계산.
+    반환: {"ef": float%, "edv_rel": float, "esv_rel": float}
+    edv_rel/esv_rel = pixel_area^1.5 / 1e4 (단위 없는 상대값, 픽셀 캘리브레이션 불필요)
+    """
+    if ed_mask is None or es_mask is None:
+        return None
+    a_ed = float((ed_mask > 0.5).sum())
+    a_es = float((es_mask > 0.5).sum())
+    if a_ed < 1.0:
+        return None
+    edv_raw = a_ed ** 1.5
+    esv_raw = a_es ** 1.5
+    ef = (edv_raw - esv_raw) / edv_raw * 100.0
+    scale = 1e-4
+    return {
+        "ef":      float(np.clip(ef, 0.0, 100.0)),
+        "edv_rel": round(edv_raw * scale, 1),
+        "esv_rel": round(esv_raw * scale, 1),
+    }
+
+
+def get_engine(model_type: str = "sonocube", model_dir: Optional[Path] = None):
+    """모델 타입에 따른 엔진 반환."""
+    if model_type == "echonet":
+        md = Path(model_dir) if model_dir else Path(MODEL_REGISTRY["echonet"]["dir"])
+        return EchoNetEngine(md)
+    if model_type == "sonocube_v2":
+        md = Path(model_dir) if model_dir else Path(MODEL_REGISTRY["sonocube_v2"]["dir"])
+        return SonoCubeV2Engine(md)
+    md = Path(model_dir) if model_dir else Path(MODEL_REGISTRY["sonocube"]["dir"])
+    return SonoCubeEngine(md)
+
+
 # 기존 analyze_clip 함수를 SonoCubeEngine을 사용하도록 업데이트
-def analyze_clip(video_path: Path, model_dir: Optional[Path] = None) -> Dict[str, Any]:
-    """
-    심초음파 영상 클립을 분석하여 LV 분할, EF 계산 등을 반환
-    
-    Args:
-        video_path: 심초음파 영상 파일 경로
-        model_dir: 모델 디렉토리 경로 (None이면 기본 경로 사용)
-        
-    Returns:
-        분석 결과 딕셔너리
-    """
-    # 1. 영상 로드 (raw RGB uint8 프레임)
+def analyze_clip(video_path: Path, model_dir: Optional[Path] = None,
+                 model_type: str = "sonocube") -> Dict[str, Any]:
+    """심초음파 영상 클립 분석. model_type: 'sonocube' 또는 'echonet'."""
     frames, fps = load_echo_clip(video_path)
 
-    # 2. AI Engine 초기화 및 inference
-    # 정규화/리사이즈는 _infer_onnx 내부에서 수행 — 여기서 preprocess 불필요
-    engine = SonoCubeEngine(model_dir)
-    video_array = np.array(frames)
-
-    # Inference
-    results = engine.infer(video_array, metadata={"fps": fps, "file_path": str(video_path)})
+    if model_type == "echonet":
+        engine = EchoNetEngine(Path(model_dir) if model_dir else Path(MODEL_REGISTRY["echonet"]["dir"]))
+        results = engine.infer(frames)
+    elif model_type == "sonocube_v2":
+        engine = SonoCubeV2Engine(Path(model_dir) if model_dir else Path(MODEL_REGISTRY["sonocube_v2"]["dir"]))
+        results = engine.infer(frames)
+    else:
+        engine = SonoCubeEngine(model_dir)
+        video_array = np.array(frames)
+        results = engine.infer(video_array, metadata={"fps": fps, "file_path": str(video_path)})
     
     # 4. 결과 정리
     lv_masks = results.get("lv_masks", [])
@@ -427,13 +769,41 @@ def analyze_clip(video_path: Path, model_dir: Optional[Path] = None) -> Dict[str
     
     from utils.constants import get_confidence_level, UNSUPPORTED_METRICS
 
+    _sm_vol = compute_simpson_metrics(ed_mask, es_mask)
+    _sm_ef  = _sm_vol["ef"] if _sm_vol else None
+
     ef_std = results.get("ef_std", 0.0)
-    model_info = {
-        "name": engine.config.get("model_name", "sonocube-ef"),
-        "version": engine.config.get("model_version", "v0.1"),
-        "variant": engine.model.get("path", Path("unknown")).parent.name if engine.model_loaded and engine.model else "unknown",
-        "path": str(engine.model.get("path", "")) if engine.model_loaded and engine.model else "",
-    }
+    reg = MODEL_REGISTRY.get(model_type, MODEL_REGISTRY["sonocube"])
+    if model_type == "echonet":
+        model_info = {
+            "name":        "r2plus1d-linear-probe",
+            "version":     "v1.0",
+            "variant":     "echonet",
+            "label":       reg["label"],
+            "val_mae":     reg["val_mae"],
+            "limitation":  reg["limitation"],
+            "model_type":  "echonet",
+        }
+    elif model_type == "sonocube_v2":
+        model_info = {
+            "name":       "sonocube-ef-v2",
+            "version":    "v2.0",
+            "variant":    "ed_es_pair",
+            "label":      reg["label"],
+            "val_mae":    reg["val_mae"],
+            "limitation": reg["limitation"],
+            "model_type": "sonocube_v2",
+        }
+    else:
+        model_info = {
+            "name":       "sonocube-ef",
+            "version":    "v0.1",
+            "variant":    "w_075",
+            "label":      reg["label"],
+            "val_mae":    reg["val_mae"],
+            "limitation": reg["limitation"],
+            "model_type": "sonocube",
+        }
 
     return {
         "frames": frames,  # raw RGB uint8 — 화면 표시용
@@ -453,8 +823,12 @@ def analyze_clip(video_path: Path, model_dir: Optional[Path] = None) -> Dict[str
             "es": es_mask,
             "all": lv_masks if isinstance(lv_masks, list) else []
         },
+        "simpson_ef": _sm_ef,
         "unsupported_metrics": UNSUPPORTED_METRICS,
-        "volume_info": {"edv": None, "esv": None},
+        "volume_info": {
+            "edv_rel": _sm_vol["edv_rel"] if _sm_vol else None,
+            "esv_rel": _sm_vol["esv_rel"] if _sm_vol else None,
+        },
         "fps": fps,
         "metadata": {
             "num_frames": len(frames),

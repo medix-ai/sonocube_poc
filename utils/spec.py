@@ -8,33 +8,30 @@ from typing import Union
 
 
 def resource_path(relative_path: Union[str, Path]) -> Path:
+    """PyInstaller 패키징 환경과 개발 환경 모두에서 리소스 경로 반환.
+
+    반드시 상대 경로(str 또는 Path)를 전달해야 함.
+    절대경로를 넘기면 _MEIPASS가 무시되므로 허용하지 않음.
     """
-    PyInstaller로 패키징된 환경에서도 리소스 파일에 안전하게 접근
-    
-    Args:
-        relative_path: 리소스 파일의 상대 경로
-        
-    Returns:
-        실제 리소스 파일의 절대 경로
-    """
+    p = Path(relative_path)
+    if p.is_absolute():
+        return p  # 이미 절대경로면 그대로 반환 (개발 환경 호환)
     if hasattr(sys, '_MEIPASS'):
-        # PyInstaller로 패키징된 경우
-        base_path = Path(sys._MEIPASS)
-    else:
-        # 개발 환경
-        base_path = Path(__file__).parent.parent
-    
-    return base_path / relative_path
+        return Path(sys._MEIPASS) / p
+    return Path(__file__).parent.parent / p
 
 
 # 프로젝트 루트 경로
-PROJECT_ROOT = Path(__file__).parent.parent
+if hasattr(sys, '_MEIPASS'):
+    PROJECT_ROOT = Path(sys._MEIPASS)
+else:
+    PROJECT_ROOT = Path(__file__).parent.parent
 
-# 주요 디렉토리 경로
-DATA_DIR = PROJECT_ROOT / "data"
-MODEL_DIR = PROJECT_ROOT / "model"
-ASSETS_DIR = PROJECT_ROOT / "gui" / "assets"
-TEMPLATES_DIR = PROJECT_ROOT / "report" / "templates"
+# 주요 디렉토리 경로 (상대 경로 문자열로 관리 → resource_path 호환)
+MODEL_DIR      = resource_path("model")
+ASSETS_DIR     = resource_path("gui/assets")
+TEMPLATES_DIR  = resource_path("report/templates")
+DATA_DIR       = PROJECT_ROOT / "data"
 SCREENSHOTS_DIR = PROJECT_ROOT / "screenshots"
 
 # 모델 파일 경로 (나중에 실제 모델 파일로 교체)

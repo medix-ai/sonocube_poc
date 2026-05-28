@@ -31,6 +31,7 @@ class AnalysisWorker(QThread):
         auto_pdf: bool = True,
         auto_json: bool = True,
         auto_csv: bool = True,
+        model_type: str = "sonocube",
     ):
         super().__init__()
         self.video_path = video_path
@@ -40,6 +41,7 @@ class AnalysisWorker(QThread):
         self.auto_pdf = auto_pdf
         self.auto_json = auto_json
         self.auto_csv = auto_csv
+        self.model_type = model_type
         self._is_cancelled = False
 
     # ── 실행 ─────────────────────────────────────────────────────────────────
@@ -97,7 +99,7 @@ class AnalysisWorker(QThread):
 
         try:
             t0 = time.perf_counter()
-            result = analyze_clip(self.video_path)
+            result = analyze_clip(self.video_path, model_type=self.model_type)
             latency = time.perf_counter() - t0
         except FileNotFoundError:
             msg = f"File not found: {self.video_path}"

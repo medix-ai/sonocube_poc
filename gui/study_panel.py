@@ -277,6 +277,8 @@ class StudyPanel(QWidget):
         self._ed_idx = 0
         self._es_idx = 0
         self._result: Optional[Dict[str, Any]] = None
+        self._lv_masks: Dict[str, Any] = {}   # {"ed": mask|None, "es": mask|None}
+        self._show_overlay = True
         self._build_ui()
         self._setup_shortcuts()
 
@@ -499,6 +501,15 @@ class StudyPanel(QWidget):
         self.lbl_frame_ef = QLabel("EF at frame: --")
         self.lbl_frame_ef.setStyleSheet("color: #00b4cc; font-size: 11px; font-weight: 600;")
         info_row.addWidget(self.lbl_frame_ef)
+        # LV Mask overlay 토글
+        from PyQt5.QtWidgets import QCheckBox
+        self.chk_overlay = QCheckBox("LV Mask")
+        self.chk_overlay.setChecked(True)
+        self.chk_overlay.setStyleSheet(
+            "color: #00e5cc; font-size: 11px; font-weight: 600;"
+        )
+        self.chk_overlay.stateChanged.connect(self._on_overlay_toggle)
+        info_row.addWidget(self.chk_overlay)
         info_row.addStretch()
 
         # Brightness / Contrast
@@ -584,6 +595,54 @@ class StudyPanel(QWidget):
             "background-color: #2e2e2e; border: 1px solid #404040; border-radius: 4px;"
         )
         lo.addWidget(self.ef_display)
+
+        # ── Volume Metrics (Simpson) ──
+        vol_grp = QGroupBox("Volume Metrics")
+        vol_lo = QVBoxLayout(vol_grp)
+        vol_lo.setSpacing(4)
+
+        self.lbl_simpson_ef = QLabel("Ref EF (Simpson):  --")
+        self.lbl_simpson_ef.setStyleSheet(
+            "color: #a0c8e0; font-size: 12px; font-weight: 600;"
+        )
+        vol_lo.addWidget(self.lbl_simpson_ef)
+
+        edv_esv_row = QHBoxLayout()
+        self.lbl_edv = QLabel("EDV --")
+        self.lbl_esv = QLabel("ESV --")
+        for l in (self.lbl_edv, self.lbl_esv):
+            l.setStyleSheet("color: #707070; font-size: 11px;")
+            edv_esv_row.addWidget(l)
+        edv_esv_row.addStretch()
+        vol_lo.addLayout(edv_esv_row)
+
+        lbl_vol_note = QLabel("Pixel-area based · No calibration")
+        lbl_vol_note.setStyleSheet("color: #454545; font-size: 9px; font-style: italic;")
+        vol_lo.addWidget(lbl_vol_note)
+        lo.addWidget(vol_grp)
+
+        # ── EF<40% 자동 경고 ──
+        self.lbl_ef_low_warn = QLabel(
+            "⚠  EF < 40% — 현재 모델은 저하된 EF 예측 정확도가 낮습니다.\n"
+            "결과를 임상적으로 사용하지 마십시오."
+        )
+        self.lbl_ef_low_warn.setWordWrap(True)
+        self.lbl_ef_low_warn.setStyleSheet(
+            "background-color: #3a1a1a; color: #e05252; font-size: 10px; font-weight: 600;"
+            "border: 1px solid #6a2a2a; border-radius: 3px; padding: 6px;"
+        )
+        self.lbl_ef_low_warn.setVisible(False)
+        lo.addWidget(self.lbl_ef_low_warn)
+
+        # ── 모델 한계 배너 ──
+        self.lbl_model_banner = QLabel("")
+        self.lbl_model_banner.setWordWrap(True)
+        self.lbl_model_banner.setStyleSheet(
+            "background-color: #2a2a1a; color: #e8a217; font-size: 10px;"
+            "border: 1px solid #4a4a1a; border-radius: 3px; padding: 6px;"
+        )
+        self.lbl_model_banner.setVisible(False)
+        lo.addWidget(self.lbl_model_banner)
 
         # ── Stability ──
         stab_grp = QGroupBox("Prediction Stability")
@@ -730,6 +789,8 @@ class StudyPanel(QWidget):
         self._framewise_ef = result.get("framewise_ef", [])
         self._ed_idx = result.get("ed_frame_index_final", result.get("ed_frame_idx", 0))
         self._es_idx = result.get("es_frame_index_final", result.get("es_frame_idx", 0))
+        raw_masks = result.get("lv_masks", {})
+        self._lv_masks = raw_masks if isinstance(raw_masks, dict) else {}
 
         # 중앙 뷰어 활성화
         if self._frames:
@@ -779,6 +840,34 @@ class StudyPanel(QWidget):
         # EF display
         self.ef_display.update(ef, ef_mean, ef_std, ef_min, ef_max)
 
+        # Volume Metrics (Simpson)
+        simpson_ef = result.get("simpson_ef")
+        volume_info = result.get("volume_info", {})
+        if simpson_ef is not None:
+            self.lbl_simpson_ef.setText(f"Ref EF (Simpson):  {simpson_ef:.1f}%")
+            edv_rel = volume_info.get("edv_rel")
+            esv_rel = volume_info.get("esv_rel")
+            self.lbl_edv.setText(f"EDV  {edv_rel:.0f}" if edv_rel is not None else "EDV --")
+            self.lbl_esv.setText(f"ESV  {esv_rel:.0f}" if esv_rel is not None else "ESV --")
+        else:
+            self.lbl_simpson_ef.setText("Ref EF (Simpson):  --")
+            self.lbl_edv.setText("EDV --")
+            self.lbl_esv.setText("ESV --")
+
+        # EF<40% 자동 경고
+        if ef is not None and ef < 40.0:
+            self.lbl_ef_low_warn.setVisible(True)
+        else:
+            self.lbl_ef_low_warn.setVisible(False)
+
+        # 모델 한계 배너
+        limitation = model_info.get("limitation", "")
+        if limitation:
+            self.lbl_model_banner.setText(f"⚠  Model limitation: {limitation}")
+            self.lbl_model_banner.setVisible(True)
+        else:
+            self.lbl_model_banner.setVisible(False)
+
         # Stability
         frame_count = result.get("metadata", {}).get("num_frames")
         self.stability_ind.update(conf, ef_std=ef_std, frame_count=frame_count)
@@ -794,11 +883,15 @@ class StudyPanel(QWidget):
         # Quality warnings
         self._update_quality_warnings(quality)
 
-        # Model
-        model_str = (
+        # Model — label + MAE + limitation
+        model_label = model_info.get("label") or (
             f"{model_info.get('name','?')} {model_info.get('variant','?')} "
             f"v{model_info.get('version','?')}"
         )
+        val_mae = model_info.get("val_mae", "")
+        model_str = model_label
+        if val_mae:
+            model_str += f"  |  MAE {val_mae}"
         self.lbl_model.setText(model_str)
         self.lbl_latency.setText(f"Latency: {latency:.2f}s" if latency else "Latency: --")
 
@@ -852,8 +945,36 @@ class StudyPanel(QWidget):
 
     # ── 뷰어 컨트롤 ──────────────────────────────────────────────────────────
 
+    def _on_overlay_toggle(self):
+        self._show_overlay = self.chk_overlay.isChecked()
+        self._refresh_frame()
+
     def _on_slider(self, val: int):
         self._refresh_frame(val)
+
+    def _apply_lv_overlay(self, frame: np.ndarray, idx: int) -> np.ndarray:
+        """ED/ES 프레임에 LV 마스크를 반투명 시안 컬러로 overlay."""
+        mask = None
+        if idx == self._ed_idx:
+            mask = self._lv_masks.get("ed")
+        elif idx == self._es_idx:
+            mask = self._lv_masks.get("es")
+
+        if mask is None:
+            return frame
+
+        h, w = frame.shape[:2]
+        m = cv2.resize(mask, (w, h), interpolation=cv2.INTER_LINEAR)
+        binary = (m > 0.5).astype(np.uint8)
+
+        overlay = frame.copy()
+        # 시안(#00e5cc) 반투명 채우기
+        overlay[binary == 1] = (overlay[binary == 1] * 0.55 +
+                                 np.array([0, 229, 204]) * 0.45).astype(np.uint8)
+        # 경계선 (밝은 시안)
+        contours, _ = cv2.findContours(binary, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        cv2.drawContours(overlay, contours, -1, (0, 229, 204), 1)
+        return overlay
 
     def _refresh_frame(self, frame_idx: int = None):
         if not self._frames:
@@ -863,12 +984,14 @@ class StudyPanel(QWidget):
             return
 
         frame = self._frames[idx].copy()
-        # float(0-1) 프레임 대비 안전하게 uint8 스케일로 통일
         if frame.dtype != np.uint8:
             frame = np.clip(frame * 255, 0, 255).astype(np.uint8)
         brt = self.brt_slider.value()
         cst = self.cst_slider.value() / 100.0
         frame = np.clip(frame.astype(np.float32) * cst + brt, 0, 255).astype(np.uint8)
+
+        if self._show_overlay:
+            frame = self._apply_lv_overlay(frame, idx)
 
         tag = ""
         if idx == self._ed_idx:

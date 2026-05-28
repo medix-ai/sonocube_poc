@@ -48,7 +48,8 @@ def get_ef_category(ef: float) -> str:
     Returns:
         카테고리 문자열
     """
-    if ef >= 50:
+    # AHA/ASE 기준: ≥55% Normal, 40–54% Mildly Reduced, 30–39% Moderately, <30% Severely
+    if ef >= 55:
         return "Normal"
     elif ef >= 40:
         return "Mildly Reduced"

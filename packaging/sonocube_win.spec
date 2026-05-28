@@ -8,8 +8,10 @@ a = Analysis(
     pathex=[],
     binaries=[],
     datas=[
-        ('../model', 'model'),  # 모델 파일 포함
-        ('../gui/assets', 'gui/assets'),  # GUI 리소스
+        ('../model/lvseg', 'model/lvseg'),    # LV 분할 U-Net
+        ('../model/v2', 'model/v2'),          # SonoCubeV2 (기본)
+        ('../model/w_075', 'model/w_075'),    # 레거시 per-frame CNN
+        ('../gui/assets', 'gui/assets'),      # GUI 리소스
         ('../report/templates', 'report/templates'),  # 리포트 템플릿
     ],
     hiddenimports=[
@@ -19,9 +21,6 @@ a = Analysis(
         'PyQt5.QtWidgets',
         'numpy',
         'cv2',
-        'open3d',
-        'pyvista',
-        'pyvistaqt',
         'matplotlib',
         'reportlab',
         'pydicom',
@@ -29,7 +28,7 @@ a = Analysis(
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
-    excludes=[],
+    excludes=['torch', 'torchvision', 'torchaudio', 'open3d', 'pyvista', 'pyvistaqt'],
     win_no_prefer_redirects=False,
     win_private_assemblies=False,
     cipher=block_cipher,
