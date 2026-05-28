@@ -75,14 +75,33 @@ pip install -r requirements.txt
 python main.py
 ```
 
-### 패키징
+### 배포용 빌드 (macOS)
 
 ```bash
-# macOS
+# 1. 앱 빌드
 pyinstaller packaging/sonocube_mac.spec
 # → dist/SonoCube.app
 
-# Windows
+# 2. DMG 패키지 생성
+bash packaging/build_dmg.sh
+# → dist/SonoCube-1.3.0.dmg  (~178MB)
+```
+
+### macOS Gatekeeper 우회
+
+서명되지 않은 앱이므로 처음 실행 시 보안 경고가 표시됩니다.
+
+**방법 1 — 터미널 (권장)**
+```bash
+sudo xattr -rd com.apple.quarantine /Applications/SonoCube.app
+```
+
+**방법 2 — System Settings**
+System Settings → Privacy & Security → "SonoCube was blocked" → **Open Anyway**
+
+### Windows 빌드
+
+```bash
 pyinstaller packaging/sonocube_win.spec
 # → dist/SonoCube.exe
 ```

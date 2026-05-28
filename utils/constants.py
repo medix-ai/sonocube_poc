@@ -1,17 +1,17 @@
 """SonoCube 앱 전역 상수"""
 
-APP_VERSION = "1.2.0"
+APP_VERSION = "1.3.0"
 APP_NAME = "SonoCube PoC"
 DISCLAIMER = "Research use only. Not for diagnostic use."
 
 UNSUPPORTED_METRICS = {
-    "edv": "Requires LV segmentation",
-    "esv": "Requires LV segmentation",
+    "edv": "Pixel-area based relative unit (no pixel calibration)",
+    "esv": "Pixel-area based relative unit (no pixel calibration)",
     "wall_thickness": "Requires myocardium segmentation",
     "sphericity": "Requires LV segmentation",
     "la_volume": "Requires chamber segmentation",
     "ra_volume": "Requires chamber segmentation",
-    "segmentation_overlay": "Unavailable: segmentation model not connected",
+    "segmentation_overlay": "Partial — ED/ES frames only (v1.3)",
     "three_d_reconstruction": "Unavailable in current version",
 }
 
