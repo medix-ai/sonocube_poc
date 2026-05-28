@@ -1,5 +1,5 @@
 # -*- mode: python ; coding: utf-8 -*-
-# macOS용 PyInstaller 스펙 파일
+# macOS용 PyInstaller 스펙 파일 — onedir 모드 (.app 번들 권장)
 
 block_cipher = None
 
@@ -45,21 +45,19 @@ a = Analysis(
 
 pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
 
+# onedir 모드: EXE에 datas/binaries 포함하지 않음
 exe = EXE(
     pyz,
     a.scripts,
-    a.binaries,
-    a.zipfiles,
-    a.datas,
     [],
+    exclude_binaries=True,
     name='SonoCube',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
     upx=True,
     upx_exclude=[],
-    runtime_tmpdir=None,
-    console=False,  # GUI 앱이므로 콘솔 숨김
+    console=False,
     disable_windowed_traceback=False,
     argv_emulation=False,
     target_arch=None,
@@ -67,8 +65,20 @@ exe = EXE(
     entitlements_file=None,
 )
 
-app = BUNDLE(
+# COLLECT: 바이너리·datas를 별도 디렉토리로 모음
+coll = COLLECT(
     exe,
+    a.binaries,
+    a.zipfiles,
+    a.datas,
+    strip=False,
+    upx=True,
+    upx_exclude=[],
+    name='SonoCube',
+)
+
+app = BUNDLE(
+    coll,
     name='SonoCube.app',
     icon=None,  # TODO: '../gui/assets/sonocube.icns' 아이콘 준비 후 교체
     bundle_identifier='com.sonocube.poc',
@@ -82,4 +92,3 @@ app = BUNDLE(
         'NSMicrophoneUsageDescription': 'SonoCube does not use microphone.',
     },
 )
-
