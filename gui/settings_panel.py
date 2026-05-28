@@ -41,7 +41,7 @@ def save_settings(s: Dict[str, Any]):
 def _default_settings() -> Dict[str, Any]:
     from utils.spec import PROJECT_ROOT
     return {
-        "default_model": "w_075",
+        "model_type": "sonocube_v2",
         "output_dir": str(PROJECT_ROOT / "output"),
         "auto_pdf": True,
         "auto_json": True,
@@ -77,12 +77,26 @@ class SettingsPanel(QWidget):
         model_form.setSpacing(10)
 
         self.model_combo = QComboBox()
-        self.model_combo.addItems(["w_075 (Recommended)", "w_035"])
-        self.model_combo.setFixedWidth(200)
-        model_form.addRow(QLabel("Default model:"), self.model_combo)
+        self.model_combo.addItems([
+            "SonoCube V2 (ED/ES pair)  — MAE 8.76%, r=0.534",
+            "SonoCube PoC (w_075)  — MAE ~9.4%",
+            "R2Plus1D Linear Probe (Kinetics→EchoNet)  — MAE ~12.2%",
+        ])
+        self.model_combo.setFixedWidth(360)
+        model_form.addRow(QLabel("Active model:"), self.model_combo)
+
+        model_note = QLabel(
+            "V2: ED·ES 프레임 쌍 입력 CNN — 현재 최고 성능 (r=0.534).\n"
+            "w_075: 프레임별 CNN, PoC 품질 (MAE ~9.4%).\n"
+            "R2Plus1D: Kinetics 백본 + EchoNet linear probe (MAE ~12.2%, r=0.36).\n"
+            "모든 모델은 연구용 전용입니다."
+        )
+        model_note.setStyleSheet("color: #606060; font-size: 10px;")
+        model_note.setWordWrap(True)
+        model_form.addRow(QLabel(""), model_note)
 
         self.chk_comparison = QCheckBox(
-            "Enable model comparison mode (Research — runs both w_035 and w_075)"
+            "Enable dual-model comparison (Research — runs both SonoCube and R2Plus1D)"
         )
         model_form.addRow(QLabel(""), self.chk_comparison)
         outer.addWidget(model_group)
@@ -158,8 +172,8 @@ class SettingsPanel(QWidget):
 
     def _load_into_ui(self):
         s = self._settings
-        model_val = s.get("default_model", "w_075")
-        idx = 0 if "075" in model_val else 1
+        model_val = s.get("model_type", "sonocube_v2")
+        idx = {"sonocube_v2": 0, "sonocube": 1, "echonet": 2}.get(model_val, 0)
         self.model_combo.setCurrentIndex(idx)
         self.chk_comparison.setChecked(bool(s.get("comparison_mode", False)))
         self.output_edit.setText(s.get("output_dir", ""))
@@ -168,8 +182,7 @@ class SettingsPanel(QWidget):
         self.chk_csv.setChecked(bool(s.get("auto_csv", True)))
 
     def _save(self):
-        model_text = self.model_combo.currentText()
-        self._settings["default_model"] = "w_075" if "075" in model_text else "w_035"
+        self._settings["model_type"] = ["sonocube_v2", "sonocube", "echonet"][self.model_combo.currentIndex()]
         self._settings["comparison_mode"] = self.chk_comparison.isChecked()
         self._settings["output_dir"] = self.output_edit.text().strip()
         self._settings["auto_pdf"]  = self.chk_pdf.isChecked()

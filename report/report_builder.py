@@ -1,5 +1,5 @@
 """
-PDF 리포트 생성 모듈 — SonoCube v1.2
+PDF 리포트 생성 모듈 — SonoCube v1.3
 ReportLab + matplotlib(Agg, 스레드 안전) — 라이트 임상 테마
 """
 import io
@@ -148,19 +148,28 @@ def _build_story(result: Dict[str, Any], styles) -> list:
             s.append(Image(str(curve_path), width=15 * cm, height=5.5 * cm))
         s.append(Spacer(1, 0.5 * cm))
 
-    # ── ED/ES 스냅샷 ──
+    # ── ED/ES 스냅샷 (LV 마스크 overlay 포함) ──
     frames = result.get("frames", [])
     ed_idx = result.get("ed_frame_index_final", result.get("ed_frame_idx", 0))
     es_idx = result.get("es_frame_index_final", result.get("es_frame_idx", 0))
+    raw_masks = result.get("lv_masks", {})
+    ed_mask = raw_masks.get("ed") if isinstance(raw_masks, dict) else None
+    es_mask = raw_masks.get("es") if isinstance(raw_masks, dict) else None
     if frames:
         s.append(Paragraph("Candidate Frame Snapshots", styles["h2"]))
-        s.append(Spacer(1, 0.15 * cm))
+        s.append(Spacer(1, 0.05 * cm))
+        if ed_mask is not None:
+            s.append(Paragraph(
+                "LV segmentation mask overlay shown in cyan.",
+                styles["small_grey"]
+            ))
+        s.append(Spacer(1, 0.1 * cm))
         snap_data = [
             [Paragraph("ED Candidate Frame", styles["tbl_hdr"]),
              Paragraph("ES Candidate Frame", styles["tbl_hdr"])],
         ]
-        ed_img = _frame_image_element(frames, ed_idx, "ED")
-        es_img = _frame_image_element(frames, es_idx, "ES")
+        ed_img = _frame_image_element(frames, ed_idx, "ED", lv_mask=ed_mask)
+        es_img = _frame_image_element(frames, es_idx, "ES", lv_mask=es_mask)
         snap_data.append([ed_img or "N/A", es_img or "N/A"])
         t = Table(snap_data, colWidths=[7.5 * cm, 7.5 * cm])
         t.setStyle(TableStyle([
@@ -261,40 +270,43 @@ def _case_info_table(result: Dict[str, Any]) -> Table:
 
 
 def _ef_results_table(result: Dict[str, Any]) -> Table:
-    ef     = result.get("ef", 0.0)
-    ef_mean= result.get("ef_mean", 0.0)
-    ef_std = result.get("ef_std", 0.0)
-    ef_min = result.get("ef_min", 0.0)
-    ef_max = result.get("ef_max", 0.0)
-    conf   = result.get("confidence_level", "Unknown")
-    ed_idx = result.get("ed_frame_index_final", result.get("ed_frame_idx", 0))
-    es_idx = result.get("es_frame_index_final", result.get("es_frame_idx", 0))
-    latency= result.get("inference_latency_s")
+    ef      = result.get("ef", 0.0)
+    ef_mean = result.get("ef_mean", 0.0)
+    ef_std  = result.get("ef_std", 0.0)
+    ef_min  = result.get("ef_min", 0.0)
+    ef_max  = result.get("ef_max", 0.0)
+    conf    = result.get("confidence_level", "Unknown")
+    ed_idx  = result.get("ed_frame_index_final", result.get("ed_frame_idx", 0))
+    es_idx  = result.get("es_frame_index_final", result.get("es_frame_idx", 0))
+    latency = result.get("inference_latency_s")
+    simpson = result.get("simpson_ef")
+    vol     = result.get("volume_info", {})
+    edv_rel = vol.get("edv_rel")
+    esv_rel = vol.get("esv_rel")
 
     rows = [
-        ["Estimated EF (median)",  f"{ef:.1f}%"],
+        ["Estimated EF (AI)",      f"{ef:.1f}%"],
         ["EF Mean",                f"{ef_mean:.1f}%"],
         ["EF Std (σ)",             f"±{ef_std:.2f}%"],
         ["EF Min / Max",           f"{ef_min:.1f}% / {ef_max:.1f}%"],
-        ["EF Range",               f"{ef:.1f}% ± {ef_std:.2f}%"],
         ["Prediction Stability",   conf],
         ["ED Candidate Frame",     f"#{ed_idx}"],
         ["ES Candidate Frame",     f"#{es_idx}"],
         ["Manual Override",        "Yes" if result.get("manual_override") else "No"],
         ["Inference Latency",      f"{latency:.2f} s" if latency else "N/A"],
-        ["EDV",                    UNSUPPORTED_METRICS["edv"]],
-        ["ESV",                    UNSUPPORTED_METRICS["esv"]],
+        ["Simpson EF (ref)",       f"{simpson:.1f}%" if simpson is not None else "N/A"],
+        ["EDV (rel. units)",       f"{edv_rel:.0f}" if edv_rel is not None else "N/A (no calib.)"],
+        ["ESV (rel. units)",       f"{esv_rel:.0f}" if esv_rel is not None else "N/A (no calib.)"],
     ]
     return _kv_table(rows)
 
 
 def _unsupported_table() -> Table:
     labels = {
-        "edv": "EDV", "esv": "ESV",
         "wall_thickness": "Wall Thickness",
         "sphericity": "Sphericity Index",
         "la_volume": "LA Volume", "ra_volume": "RA Volume",
-        "segmentation_overlay": "Segmentation Overlay",
+        "segmentation_overlay": "Segmentation Overlay (multi-frame)",
         "three_d_reconstruction": "3D Reconstruction",
     }
     rows = [["Metric", "Status"]]
@@ -318,10 +330,14 @@ def _metadata_table(result: Dict[str, Any]) -> Table:
     meta       = result.get("metadata", {})
     model_info = result.get("model_info", {})
     qm         = result.get("quality_metrics", {})
+    model_label = model_info.get("label") or (
+        f"{model_info.get('name', 'unknown')} {model_info.get('variant', '')} "
+        f"v{model_info.get('version', '?')}"
+    )
     rows = [
-        ["Model Name",      model_info.get("name", "unknown")],
-        ["Model Variant",   model_info.get("variant", "unknown")],
-        ["Model Version",   model_info.get("version", "unknown")],
+        ["Model",           model_label],
+        ["Val MAE",         model_info.get("val_mae", "N/A")],
+        ["Limitation",      model_info.get("limitation", "N/A")],
         ["Total Frames",    str(meta.get("num_frames", "N/A"))],
         ["FPS",             f"{result.get('fps', 0):.1f}"],
         ["Blur Score",      f"{qm.get('blur_score', 0):.1f}" if qm.get("blur_score") else "N/A"],
@@ -463,7 +479,8 @@ def _create_ef_curve_image(
 
 
 def _frame_image_element(
-    frames: list, idx: int, label: str, size_cm: float = 6.0
+    frames: list, idx: int, label: str,
+    lv_mask: Optional[np.ndarray] = None, size_cm: float = 6.0
 ) -> Optional[Image]:
     try:
         if idx >= len(frames):
@@ -477,6 +494,21 @@ def _frame_image_element(
             img_bgr = cv2.cvtColor(frame[:, :, 0], cv2.COLOR_GRAY2BGR)
         else:
             img_bgr = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
+
+        # LV 마스크 overlay — 시안(BGR: 204,229,0) 반투명 채우기 + 경계선
+        if lv_mask is not None:
+            h, w = img_bgr.shape[:2]
+            m = cv2.resize(lv_mask.astype(np.float32), (w, h), interpolation=cv2.INTER_LINEAR)
+            binary = (m > 0.5).astype(np.uint8)
+            overlay = img_bgr.copy()
+            mask_px = binary == 1
+            overlay[mask_px] = (
+                overlay[mask_px] * 0.55 + np.array([204, 229, 0]) * 0.45
+            ).astype(np.uint8)
+            contours, _ = cv2.findContours(binary, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+            cv2.drawContours(overlay, contours, -1, (204, 229, 0), 1)
+            img_bgr = overlay
+
         cv2.putText(img_bgr, label, (6, 26),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.9, (255, 255, 255), 2)
         tmp = Path(tempfile.mktemp(suffix=".png"))

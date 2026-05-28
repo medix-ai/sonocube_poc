@@ -8,9 +8,10 @@ a = Analysis(
     pathex=[],
     binaries=[],
     datas=[
-        ('../model', 'model'),  # 모델 파일 포함
-        ('../gui/assets', 'gui/assets'),  # GUI 리소스
-        ('../report/templates', 'report/templates'),  # 리포트 템플릿
+        ('../model/lvseg', 'model/lvseg'),    # LV 분할 U-Net
+        ('../model/v2', 'model/v2'),          # SonoCubeV2 (기본)
+        ('../model/w_075', 'model/w_075'),    # 레거시 per-frame CNN
+        ('../gui/assets', 'gui/assets'),      # GUI 리소스
     ],
     hiddenimports=[
         'PyQt5',
@@ -19,17 +20,23 @@ a = Analysis(
         'PyQt5.QtWidgets',
         'numpy',
         'cv2',
-        'open3d',
-        'pyvista',
-        'pyvistaqt',
+        'cv2.cv2',
         'matplotlib',
+        'matplotlib.backends.backend_agg',
+        'matplotlib.backends.backend_qt5agg',
         'reportlab',
+        'reportlab.graphics',
+        'reportlab.platypus',
         'pydicom',
+        'onnxruntime',
+        'onnxruntime.capi._pybind_state',
+        'scipy',
+        'scipy.stats',
     ],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
-    excludes=[],
+    excludes=['torch', 'torchvision', 'torchaudio', 'open3d', 'pyvista', 'pyvistaqt'],
     win_no_prefer_redirects=False,
     win_private_assemblies=False,
     cipher=block_cipher,
@@ -63,13 +70,16 @@ exe = EXE(
 app = BUNDLE(
     exe,
     name='SonoCube.app',
-    icon=None,  # 아이콘 파일 경로 지정 가능
+    icon=None,  # TODO: '../gui/assets/sonocube.icns' 아이콘 준비 후 교체
     bundle_identifier='com.sonocube.poc',
     info_plist={
         'NSPrincipalClass': 'NSApplication',
         'NSHighResolutionCapable': 'True',
-        'CFBundleShortVersionString': '1.0.0',
-        'CFBundleVersion': '1.0.0',
+        'CFBundleShortVersionString': '1.3.0',
+        'CFBundleVersion': '1.3.0',
+        'CFBundleDisplayName': 'SonoCube',
+        'NSCameraUsageDescription': 'SonoCube does not use camera.',
+        'NSMicrophoneUsageDescription': 'SonoCube does not use microphone.',
     },
 )
 

@@ -219,6 +219,7 @@ class MainWindow(QMainWindow):
             auto_pdf=s.get("auto_pdf", True),
             auto_json=s.get("auto_json", True),
             auto_csv=s.get("auto_csv", True),
+            model_type=s.get("model_type", "sonocube"),
         )
         self.worker.progress_updated.connect(self._on_progress)
         self.worker.analysis_finished.connect(self._on_analysis_finished)
