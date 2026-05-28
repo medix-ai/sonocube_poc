@@ -52,6 +52,12 @@ sonocube_poc/model/config_*.json
 !sonocube_poc/model/*.example
 !sonocube_poc/model/README.md
 
+# 대용량 / 실패 모델 — 절대 커밋 금지
+model/echonet/
+model/**/*.bad
+model/**/*.bad*
+model/**/best_v2b.pt
+
 # Testing
 .pytest_cache/
 .coverage
