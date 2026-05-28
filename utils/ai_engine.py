@@ -430,7 +430,7 @@ class LVSegEngine:
     IMG_SIZE = 96
 
     def __init__(self, model_dir: Optional[Path] = None):
-        self.model_dir = Path(model_dir) if model_dir else Path("model/lvseg")
+        self.model_dir = Path(model_dir) if model_dir else resource_path("model/lvseg")
         self.session = None
         self._load_model()
 
@@ -551,7 +551,7 @@ class SonoCubeV2Engine:
     IMG_SIZE = 96
 
     def __init__(self, model_dir: Optional[Path] = None):
-        self.model_dir = Path(model_dir) if model_dir else Path("model/v2")
+        self.model_dir = Path(model_dir) if model_dir else resource_path("model/v2")
         self.model = None
         self.model_loaded = False
         self._load_model()
@@ -634,7 +634,7 @@ class EchoNetEngine:
     STD  = np.array([0.22803, 0.22145, 0.216989], dtype=np.float32)
 
     def __init__(self, model_dir: Optional[Path] = None):
-        self.model_dir = Path(model_dir) if model_dir else Path("model/echonet")
+        self.model_dir = Path(model_dir) if model_dir else resource_path("model/echonet")
         self.model = None
         self.model_loaded = False
         self._load_model()
@@ -727,12 +727,12 @@ def compute_simpson_metrics(ed_mask: np.ndarray, es_mask: np.ndarray) -> Optiona
 def get_engine(model_type: str = "sonocube", model_dir: Optional[Path] = None):
     """모델 타입에 따른 엔진 반환."""
     if model_type == "echonet":
-        md = Path(model_dir) if model_dir else Path(MODEL_REGISTRY["echonet"]["dir"])
+        md = Path(model_dir) if model_dir else resource_path(MODEL_REGISTRY["echonet"]["dir"])
         return EchoNetEngine(md)
     if model_type == "sonocube_v2":
-        md = Path(model_dir) if model_dir else Path(MODEL_REGISTRY["sonocube_v2"]["dir"])
+        md = Path(model_dir) if model_dir else resource_path(MODEL_REGISTRY["sonocube_v2"]["dir"])
         return SonoCubeV2Engine(md)
-    md = Path(model_dir) if model_dir else Path(MODEL_REGISTRY["sonocube"]["dir"])
+    md = Path(model_dir) if model_dir else resource_path(MODEL_REGISTRY["sonocube"]["dir"])
     return SonoCubeEngine(md)
 
 
@@ -743,10 +743,10 @@ def analyze_clip(video_path: Path, model_dir: Optional[Path] = None,
     frames, fps = load_echo_clip(video_path)
 
     if model_type == "echonet":
-        engine = EchoNetEngine(Path(model_dir) if model_dir else Path(MODEL_REGISTRY["echonet"]["dir"]))
+        engine = EchoNetEngine(Path(model_dir) if model_dir else resource_path(MODEL_REGISTRY["echonet"]["dir"]))
         results = engine.infer(frames)
     elif model_type == "sonocube_v2":
-        engine = SonoCubeV2Engine(Path(model_dir) if model_dir else Path(MODEL_REGISTRY["sonocube_v2"]["dir"]))
+        engine = SonoCubeV2Engine(Path(model_dir) if model_dir else resource_path(MODEL_REGISTRY["sonocube_v2"]["dir"]))
         results = engine.infer(frames)
     else:
         engine = SonoCubeEngine(model_dir)
