@@ -20,6 +20,9 @@ fi
 
 echo "▶ DMG 생성: ${DMG_OUT}"
 
+# 기존 파일 정리
+rm -f "$DMG_TMP" "$DMG_OUT"
+
 # 1. 임시 읽기-쓰기 DMG 생성
 hdiutil create \
   -srcfolder "$APP_PATH" \
