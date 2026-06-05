@@ -9,7 +9,7 @@
 | 항목 | 내용 |
 |---|---|
 | 앱 이름 | SonoCube |
-| 버전 | v1.3.0 |
+| 버전 | v1.4.0 |
 | 플랫폼 | macOS (Apple Silicon / Intel) |
 | 카테고리 | 심장초음파 연구 도구 |
 | 대상 사용자 | 심장내과 연구자, 임상 연구원, 의공학 연구팀 |
@@ -32,7 +32,7 @@ ED/ES 프레임 자동 검출 → AI EF 추론 → PDF 리포트까지
 ```
 
 ### CTA 버튼
-- **Primary**: `macOS용 다운로드 (v1.3.0)` → `.dmg` 파일 링크
+- **Primary**: `macOS용 다운로드 (v1.4.0)` → `.dmg` 파일 링크
 - **Secondary**: `GitHub에서 보기` → GitHub 레포 링크
 
 ### 비주얼
@@ -94,7 +94,7 @@ SonoCube가 하는 일
 
 ```
 [영상 드래그 앤 드롭]  →  [ED/ES 자동 검출 + AI 추론]  →  [PDF 리포트 저장]
- AVI · DICOM 지원        ONNX 경량 모델 (MAE 8.76%)      통계 + 시각화 포함
+ AVI · DICOM 지원        ONNX 경량 모델 (MAE 8.01%)      통계 + 시각화 포함
 ```
 
 ### 상세 설명
@@ -137,7 +137,7 @@ PDF 리포트를 생성하면 EF 범위 바, 프레임 통계, 품질 경고가 
 **카드 1 — ONNX 경량 모델**
 - 아이콘: CPU/칩 아이콘
 - 제목: `인터넷 없이 로컬 실행`
-- 설명: `외부 서버에 데이터를 전송하지 않습니다. 모든 추론은 로컬 CPU에서 실행되는 ONNX 경량 모델(~60KB)로 처리됩니다. ED/ES 쌍 입력 방식으로 EchoNet 테스트셋 기준 MAE 8.76%, r=0.534를 달성했습니다. 환자 영상 데이터가 기기 밖으로 나가지 않습니다.`
+- 설명: `외부 서버에 데이터를 전송하지 않습니다. 모든 추론은 로컬 CPU에서 실행되는 ONNX 경량 모델(~60KB)로 처리됩니다. ED/ES 쌍 입력 방식으로 EchoNet 테스트셋 기준 MAE 8.01%, r=0.614를 달성했습니다. 환자 영상 데이터가 기기 밖으로 나가지 않습니다.`
 
 ---
 
@@ -193,8 +193,8 @@ SonoCube는 임상 연구 현장에서 반복적인 echo 분석 작업을 줄이
 SonoCube는 표준 영상 파일(AVI/DICOM)만 있으면
 어떤 환경에서도 동일한 AI 파이프라인으로 분석 결과를 재현할 수 있도록 설계되었습니다.
 
-v1.3에서는 LV 분할 모델(LVSegEngine)이 통합되어
-수동 프레임 선택 없이 ED/ES를 자동 검출합니다.
+v1.4에서는 SonoCubeV2b 모델이 탑재되어 예측 정확도와 편향이 개선되었습니다.
+LV 분할 모델(LVSegEngine)이 수동 프레임 선택 없이 ED/ES를 자동 검출하며,
 분할 마스크 기반의 Simpson EF 근사값도 참고용으로 함께 제공됩니다.
 ```
 
@@ -205,8 +205,8 @@ v1.3에서는 LV 분할 모델(LVSegEngine)이 통합되어
 - AI 추론: ONNX Runtime (CPU, Apple CoreML 가속 지원)
   - LVSegEngine: LV 분할 U-Net (1.8MB), Dice=0.930·IoU=0.871 (EchoNet TEST)
     → 프레임별 LV 마스크 → ED=최대 면적 / ES=최소 면적(시간순 제약)
-  - SonoCubeV2: ED/ES 쌍 입력 경량 CNN (60KB, 6×96×96)
-    → EchoNet TEST MAE 8.76%·r=0.534
+  - SonoCubeV2b: ED/ES 쌍 입력 경량 CNN (60KB, 6×96×96)
+    → EchoNet TEST MAE 8.01%·r=0.614·Bias +0.49%
   - 학습 데이터: EchoNet-Dynamic (10,030 케이스)
 - 영상 처리: OpenCV
 - 리포트: ReportLab
@@ -225,7 +225,8 @@ v1.3에서는 LV 분할 모델(LVSegEngine)이 통합되어
 | 버전 | 목표 |
 |---|---|
 | v1.2 | EF 자동 추정, PDF 리포트, 케이스 히스토리 |
-| v1.3 (현재) | LVSeg 통합 (Dice=0.930) + SonoCubeV2 (60KB, MAE 8.76%) — LV 마스크 기반 ED/ES 자동 검출, Simpson EF 근사 |
+| v1.3 | LVSeg 통합 (Dice=0.930) + SonoCubeV2 — LV 마스크 기반 ED/ES 자동 검출, Simpson EF 근사 |
+| v1.4 (현재) | SonoCubeV2b 탑재 — MAE 8.01%, r=0.614, Bias 보정 (+0.49%) |
 | v1.5 (예정) | EDV/ESV 정량 지원, 멀티케이스 배치 분석 |
 | v2.0 (예정) | EF 추이 시각화, DICOM SR 내보내기, 멀티센터 연구 지원 |
 
@@ -264,7 +265,7 @@ It is not a medical device and must not be used for clinical diagnosis.
 
 | 버튼 | 링크 | 비고 |
 |---|---|---|
-| `macOS 다운로드 (v1.3.0)` | `.dmg` 파일 직링크 | Apple Silicon + Intel Universal |
+| `macOS 다운로드 (v1.4.0)` | `.dmg` 파일 직링크 | Apple Silicon + Intel Universal |
 | `GitHub 소스코드` | GitHub 레포 URL | 연구자 공개용 |
 
 ### 설치 안내 (macOS Gatekeeper 관련)
@@ -289,7 +290,7 @@ xattr -rd com.apple.quarantine SonoCube.app
 ## 9. Footer
 
 ```
-SonoCube v1.3.0
+SonoCube v1.4.0
 Research use only. Not for clinical diagnosis.
 
 © 2026 SonoCube Research Team
