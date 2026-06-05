@@ -1011,8 +1011,8 @@ class StudyPanel(QWidget):
             self.slider.setValue(idx)
 
     def _update_ed_es_labels(self):
-        ef_ed = self._framewise_ef[self._ed_idx] if self._framewise_ef else 0
-        ef_es = self._framewise_ef[self._es_idx] if self._framewise_ef else 0
+        ef_ed = self._framewise_ef[self._ed_idx] if (self._framewise_ef and self._ed_idx < len(self._framewise_ef)) else 0
+        ef_es = self._framewise_ef[self._es_idx] if (self._framewise_ef and self._es_idx < len(self._framewise_ef)) else 0
         self.lbl_ed_es.setText(f"ED #{self._ed_idx}  |  ES #{self._es_idx}")
         self.lbl_ed.setText(f"ED:  Frame #{self._ed_idx}   ({ef_ed:.1f}%)")
         self.lbl_es.setText(f"ES:  Frame #{self._es_idx}   ({ef_es:.1f}%)")

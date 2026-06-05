@@ -1,4 +1,4 @@
-"""메인 윈도우 — SonoCube v1.2  3-tab 워크스테이션 구조"""
+"""메인 윈도우 — SonoCube v1.4  3-tab 워크스테이션 구조"""
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, Optional

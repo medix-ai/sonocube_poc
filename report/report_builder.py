@@ -1,5 +1,5 @@
 """
-PDF 리포트 생성 모듈 — SonoCube v1.3
+PDF 리포트 생성 모듈 — SonoCube v1.4
 ReportLab + matplotlib(Agg, 스레드 안전) — 라이트 임상 테마
 """
 import io
