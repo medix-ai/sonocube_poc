@@ -78,7 +78,7 @@ class SettingsPanel(QWidget):
 
         self.model_combo = QComboBox()
         self.model_combo.addItems([
-            "SonoCube V2 (ED/ES pair)  — MAE 8.76%, r=0.534",
+            "SonoCube V2b (ED/ES pair)  — MAE 8.01%, r=0.614",
             "SonoCube PoC (w_075)  — MAE ~9.4%",
             "R2Plus1D Linear Probe (Kinetics→EchoNet)  — MAE ~12.2%",
         ])
@@ -86,7 +86,7 @@ class SettingsPanel(QWidget):
         model_form.addRow(QLabel("Active model:"), self.model_combo)
 
         model_note = QLabel(
-            "V2: ED·ES 프레임 쌍 입력 CNN — 현재 최고 성능 (r=0.534).\n"
+            "V2b: ED·ES 프레임 쌍 입력 CNN — 현재 최고 성능 (MAE 8.01%, r=0.614).\n"
             "w_075: 프레임별 CNN, PoC 품질 (MAE ~9.4%).\n"
             "R2Plus1D: Kinetics 백본 + EchoNet linear probe (MAE ~12.2%, r=0.36).\n"
             "모든 모델은 연구용 전용입니다."

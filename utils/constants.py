@@ -11,7 +11,7 @@ UNSUPPORTED_METRICS = {
     "sphericity": "Requires LV segmentation",
     "la_volume": "Requires chamber segmentation",
     "ra_volume": "Requires chamber segmentation",
-    "segmentation_overlay": "Partial — ED/ES frames only (v1.3)",
+    "segmentation_overlay": "Partial — ED/ES frames only (v1.4)",
     "three_d_reconstruction": "Unavailable in current version",
 }
 
