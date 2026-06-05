@@ -1,6 +1,6 @@
 """SonoCube 앱 전역 상수"""
 
-APP_VERSION = "1.3.0"
+APP_VERSION = "1.4.0"
 APP_NAME = "SonoCube PoC"
 DISCLAIMER = "Research use only. Not for diagnostic use."
 

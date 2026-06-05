@@ -399,12 +399,12 @@ MODEL_REGISTRY = {
         "limitation":  "낮은 EF(<40%) 예측 불가. PoC 단계 모델.",
     },
     "sonocube_v2": {
-        "label":       "SonoCube V2 (ED/ES pair)",
-        "description": "ED·ES 프레임 쌍 입력 CNN. EchoNet test MAE 8.76%, r=0.534.",
+        "label":       "SonoCube V2b (ED/ES pair)",
+        "description": "ED·ES 프레임 쌍 입력 CNN. V2b fine-tuned: MAE 8.01%, r=0.614, Bias +0.49%.",
         "dir":         "model/v2",
         "type":        "pair",
         "params":      "~15K",
-        "val_mae":     "8.76% (r=0.534)",
+        "val_mae":     "8.01% (r=0.614)",
         "limitation":  "ED/ES 자동 검출 기반. PoC 단계 모델.",
     },
     "echonet": {
@@ -787,7 +787,7 @@ def analyze_clip(video_path: Path, model_dir: Optional[Path] = None,
     elif model_type == "sonocube_v2":
         model_info = {
             "name":       "sonocube-ef-v2",
-            "version":    "v2.0",
+            "version":    "v2b",
             "variant":    "ed_es_pair",
             "label":      reg["label"],
             "val_mae":    reg["val_mae"],
