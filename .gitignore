@@ -26,6 +26,7 @@ build/
 *.app
 *.exe
 *.spec.bak
+*.dmg
 
 # Project output (do not commit)
 sonocube_poc/output/
